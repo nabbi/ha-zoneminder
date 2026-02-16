@@ -14,15 +14,13 @@ from homeassistant.components.switch import (
 )
 from homeassistant.const import CONF_COMMAND_OFF, CONF_COMMAND_ON
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from zoneminder.monitor import Monitor, MonitorState
-from zoneminder.zm import ZoneMinder
 
-from . import DOMAIN
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,11 +43,12 @@ def setup_platform(
     off_state = MonitorState(config.get(CONF_COMMAND_OFF))
 
     switches: list[ZMSwitchMonitors] = []
-    zm_client: ZoneMinder
-    for zm_client in hass.data[DOMAIN].values():
-        if not (monitors := zm_client.get_monitors()):
-            raise PlatformNotReady("Switch could not fetch any monitors from ZoneMinder")
-        switches.extend(ZMSwitchMonitors(monitor, on_state, off_state) for monitor in monitors)
+    zm_monitors = hass.data.get(f"{DOMAIN}_monitors", {})
+    for host_name, _zm_client in hass.data[DOMAIN].items():
+        monitors = zm_monitors.get(host_name, [])
+        switches.extend(
+            ZMSwitchMonitors(monitor, on_state, off_state, host_name) for monitor in monitors
+        )
     add_entities(switches)
 
 
@@ -58,13 +57,14 @@ class ZMSwitchMonitors(SwitchEntity):
 
     icon = "mdi:record-rec"
 
-    def __init__(self, monitor: Monitor, on_state: str, off_state: str) -> None:
+    def __init__(self, monitor: Monitor, on_state: str, off_state: str, host_name: str) -> None:
         """Initialize the switch."""
         self._monitor = monitor
         self._on_state = on_state
         self._off_state = off_state
         self._state: bool | None = None
         self._attr_name = f"{monitor.name} State"
+        self._attr_unique_id = f"{host_name}_{monitor.id}_switch"
 
     def update(self) -> None:
         """Update the switch value."""

@@ -345,6 +345,7 @@ def test_sensor_count_calculation(hass: HomeAssistant) -> None:
     ]
     client = create_mock_zm_client(monitors=monitors)
     hass.data[DOMAIN] = {MOCK_HOST: client}
+    hass.data[f"{DOMAIN}_monitors"] = {MOCK_HOST: monitors}
 
     entities: list[SensorEntity] = []
     mock_add = MagicMock(side_effect=entities.extend)
@@ -359,7 +360,6 @@ def test_sensor_count_calculation(hass: HomeAssistant) -> None:
     assert len(entities) == 7
 
 
-@pytest.mark.xfail(reason="BUG-05: No unique_id on any entity")
 async def test_sensor_unique_id(
     hass: HomeAssistant, entity_registry: er.EntityRegistry, single_server_config
 ) -> None:

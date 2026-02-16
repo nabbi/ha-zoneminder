@@ -6,14 +6,12 @@ import logging
 
 from homeassistant.components.mjpeg import MjpegCamera, filter_urllib3_logging
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from zoneminder.monitor import Monitor
-from zoneminder.zm import ZoneMinder
 
-from . import DOMAIN
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,14 +25,11 @@ def setup_platform(
     """Set up the ZoneMinder cameras."""
     filter_urllib3_logging()
     cameras = []
-    zm_client: ZoneMinder
-    for zm_client in hass.data[DOMAIN].values():
-        if not (monitors := zm_client.get_monitors()):
-            raise PlatformNotReady("Camera could not fetch any monitors from ZoneMinder")
-
-        for monitor in monitors:
+    zm_monitors = hass.data.get(f"{DOMAIN}_monitors", {})
+    for host_name, zm_client in hass.data[DOMAIN].items():
+        for monitor in zm_monitors.get(host_name, []):
             _LOGGER.debug("Initializing camera %s", monitor.id)
-            cameras.append(ZoneMinderCamera(monitor, zm_client.verify_ssl))
+            cameras.append(ZoneMinderCamera(monitor, zm_client.verify_ssl, host_name))
     add_entities(cameras)
 
 
@@ -43,7 +38,7 @@ class ZoneMinderCamera(MjpegCamera):
 
     _attr_should_poll = True  # Cameras default to False
 
-    def __init__(self, monitor: Monitor, verify_ssl: bool) -> None:
+    def __init__(self, monitor: Monitor, verify_ssl: bool, host_name: str) -> None:
         """Initialize as a subclass of MjpegCamera."""
         super().__init__(
             name=monitor.name,
@@ -53,6 +48,7 @@ class ZoneMinderCamera(MjpegCamera):
         )
         self._attr_is_recording = False
         self._attr_available = False
+        self._attr_unique_id = f"{host_name}_{monitor.id}"
         self._monitor = monitor
 
     def update(self) -> None:

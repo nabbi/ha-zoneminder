@@ -14,7 +14,6 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import CONF_MONITORED_CONDITIONS
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
@@ -22,7 +21,7 @@ from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from zoneminder.monitor import Monitor, TimePeriod
 from zoneminder.zm import ZoneMinder
 
-from . import DOMAIN
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,34 +75,36 @@ def setup_platform(
     monitored_conditions = config[CONF_MONITORED_CONDITIONS]
 
     sensors: list[SensorEntity] = []
-    zm_client: ZoneMinder
-    for zm_client in hass.data[DOMAIN].values():
-        if not (monitors := zm_client.get_monitors()):
-            raise PlatformNotReady("Sensor could not fetch any monitors from ZoneMinder")
+    zm_monitors = hass.data.get(f"{DOMAIN}_monitors", {})
+    for host_name, zm_client in hass.data[DOMAIN].items():
+        monitors = zm_monitors.get(host_name, [])
+        if not monitors:
+            continue
 
         for monitor in monitors:
-            sensors.append(ZMSensorMonitors(monitor))
+            sensors.append(ZMSensorMonitors(monitor, host_name))
 
             sensors.extend(
                 [
-                    ZMSensorEvents(monitor, include_archived, description)
+                    ZMSensorEvents(monitor, include_archived, description, host_name)
                     for description in SENSOR_TYPES
                     if description.key in monitored_conditions
                 ]
             )
 
-        sensors.append(ZMSensorRunState(zm_client))
+        sensors.append(ZMSensorRunState(zm_client, host_name))
     add_entities(sensors)
 
 
 class ZMSensorMonitors(SensorEntity):
     """Get the status of each ZoneMinder monitor."""
 
-    def __init__(self, monitor: Monitor) -> None:
+    def __init__(self, monitor: Monitor, host_name: str) -> None:
         """Initialize monitor sensor."""
         self._monitor = monitor
         self._attr_available = False
         self._attr_name = f"{self._monitor.name} Status"
+        self._attr_unique_id = f"{host_name}_{monitor.id}_status"
 
     def update(self) -> None:
         """Update the sensor."""
@@ -124,6 +125,7 @@ class ZMSensorEvents(SensorEntity):
         monitor: Monitor,
         include_archived: bool,
         description: SensorEntityDescription,
+        host_name: str,
     ) -> None:
         """Initialize event sensor."""
         self.entity_description = description
@@ -132,6 +134,7 @@ class ZMSensorEvents(SensorEntity):
         self._include_archived = include_archived
         self.time_period = TimePeriod.get_time_period(description.key)
         self._attr_name = f"{monitor.name} {self.time_period.title}"
+        self._attr_unique_id = f"{host_name}_{monitor.id}_events_{description.key}"
 
     def update(self) -> None:
         """Update the sensor."""
@@ -143,10 +146,11 @@ class ZMSensorRunState(SensorEntity):
 
     _attr_name = "Run State"
 
-    def __init__(self, client: ZoneMinder) -> None:
+    def __init__(self, client: ZoneMinder, host_name: str) -> None:
         """Initialize run state sensor."""
         self._attr_available = False
         self._client = client
+        self._attr_unique_id = f"{host_name}_run_state"
 
     def update(self) -> None:
         """Update the sensor."""

@@ -153,8 +153,10 @@ async def test_multi_server_camera_creation(hass: HomeAssistant, multi_server_co
 
 def test_filter_urllib3_logging_called(hass: HomeAssistant) -> None:
     """Test filter_urllib3_logging() is called in setup_platform."""
-    client = create_mock_zm_client(monitors=[create_mock_monitor()])
+    monitors = [create_mock_monitor()]
+    client = create_mock_zm_client(monitors=monitors)
     hass.data[DOMAIN] = {MOCK_HOST: client}
+    hass.data[f"{DOMAIN}_monitors"] = {MOCK_HOST: monitors}
 
     with patch("custom_components.zoneminder.camera.filter_urllib3_logging") as mock_filter:
         setup_platform(hass, {}, MagicMock())
@@ -162,7 +164,6 @@ def test_filter_urllib3_logging_called(hass: HomeAssistant) -> None:
     mock_filter.assert_called_once()
 
 
-@pytest.mark.xfail(reason="BUG-05: No unique_id on any entity")
 async def test_camera_unique_id(
     hass: HomeAssistant, entity_registry: er.EntityRegistry, single_server_config
 ) -> None:
@@ -201,7 +202,6 @@ async def test_camera_device_info(
     assert len(monitor_devices) > 0
 
 
-@pytest.mark.xfail(reason="BUG-07: Empty monitors treated same as API failure")
 async def test_empty_server_does_not_raise_platform_not_ready(
     hass: HomeAssistant, single_server_config
 ) -> None:
@@ -254,7 +254,6 @@ async def test_camera_supports_ptz(hass: HomeAssistant, single_server_config) ->
     assert supported > 0
 
 
-@pytest.mark.xfail(reason="BUG-06: get_monitors() called separately by each platform")
 async def test_get_monitors_called_once(hass: HomeAssistant, single_server_config) -> None:
     """get_monitors should be called once and shared across platforms.
 
