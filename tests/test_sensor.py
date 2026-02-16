@@ -376,28 +376,22 @@ async def test_sensor_unique_id(
     assert entry.unique_id is not None
 
 
-@pytest.mark.xfail(reason="BUG-03: monitor.function getter makes HTTP call on every read")
 async def test_function_property_no_side_effects(hass: HomeAssistant, single_server_config) -> None:
     """Reading monitor.function should not trigger an HTTP request.
 
     The zm-py Monitor.function property calls update_monitor() on every read,
     which makes an HTTP GET to monitors/{id}.json. HA reads function from both
     sensor.py and switch.py, so the same data is fetched multiple times.
+    With the 1s TTL cache, constructor data is used on first read.
     """
-    # Create a stub client that tracks calls to get_state
     stub_client = MagicMock()
-    stub_client.get_state.return_value = {
-        "monitor": {
-            "Monitor": {"Function": "Modect"},
-            "Monitor_Status": {"CaptureFPS": "15.00"},
-        }
-    }
     stub_client.verify_ssl = True
 
     raw_result = {
         "Monitor": {
             "Id": "1",
             "Name": "Test",
+            "Function": "Modect",
             "Controllable": "0",
             "StreamReplayBuffer": "0",
             "ServerId": "0",
@@ -410,6 +404,6 @@ async def test_function_property_no_side_effects(hass: HomeAssistant, single_ser
     monitor = Monitor(stub_client, raw_result)
     stub_client.get_state.reset_mock()
 
-    # Reading function should NOT make an HTTP call
+    # Reading function should NOT make an HTTP call (constructor data is cached)
     _ = monitor.function
     assert stub_client.get_state.call_count == 0
