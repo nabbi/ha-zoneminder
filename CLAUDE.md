@@ -14,7 +14,7 @@ The integration uses the same `zoneminder` domain — when installed, it overrid
 ```bash
 python3.14 -m venv .venv
 source .venv/bin/activate
-pip install pytest pytest-asyncio pytest-homeassistant-custom-component zm-py==0.5.4 ruff mypy
+pip install -e '.[dev]'
 ```
 
 ### Run all QA checks
@@ -79,5 +79,5 @@ tox -e typing
 
 ## Dependencies
 
-- Runtime: `zm-py==0.5.4`, `homeassistant`
+- Runtime: `zm-py==0.5.5.dev5`, `homeassistant`
 - Test: `pytest-homeassistant-custom-component` (pulls in HA core + test fixtures)
