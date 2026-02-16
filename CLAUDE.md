@@ -78,7 +78,38 @@ tox -e typing
 - Python 3.14+ only
 - Conventional commits: `feat:`, `fix:`, `test:`, `docs:`, `chore:`, `refactor:`
 
+## Workflow
+
+Before committing, always run **all** QA checks and confirm they pass:
+1. `.venv/bin/ruff check custom_components tests` — linting
+2. `.venv/bin/ruff format --check custom_components tests` — formatting
+3. `.venv/bin/mypy custom_components` — type checking
+4. `.venv/bin/pytest tests -v` — tests
+
+Do not ask the user to commit until all four pass. Fix any failures first.
+
 ## Dependencies
 
 - Runtime: `zm-py==0.5.5.dev5`, `homeassistant`
 - Test: `pytest-homeassistant-custom-component` (pulls in HA core + test fixtures)
+
+## Bug & Feature Tracking
+
+Cross-references `docs/BUGS-ha-zm_zm-py.md` in the superproject. Items below track
+ha-zoneminder–specific status.
+
+### Resolved
+
+| ID | Description | Commit |
+|----|-------------|--------|
+| BUG-02 | No DataUpdateCoordinator — excessive API calls | `8285e06` |
+| BUG-05 | No `unique_id` on any entity | `cb74a1a` |
+| BUG-06 | `get_monitors()` called 3x — separate object trees | `242ad7e` |
+| BUG-10 | No `DeviceInfo` — entities not grouped | `eee8c6b` |
+
+### Deferred — Feature Requests
+
+| ID | Description | Reason |
+|----|-------------|--------|
+| BUG-08 | PTZ control not exposed | No PTZ test hardware available to validate. zm-py support is complete; HA layer needs ONVIF-style entity service + real hardware testing. |
+| BUG-16 | `Monitor.controllable` unused | Blocked by BUG-08 — will be consumed when PTZ is implemented. |
