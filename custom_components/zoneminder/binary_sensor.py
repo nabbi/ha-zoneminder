@@ -10,10 +10,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from zoneminder.zm import ZoneMinder
-
-from . import DOMAIN
+from .const import DOMAIN
+from .coordinator import ZmDataUpdateCoordinator
 
 
 async def async_setup_platform(
@@ -24,18 +24,21 @@ async def async_setup_platform(
 ) -> None:
     """Set up the ZoneMinder binary sensor platform."""
     sensors = []
-    for host_name, zm_client in hass.data[DOMAIN].items():
-        sensors.append(ZMAvailabilitySensor(host_name, zm_client))
+    coordinators = hass.data.get(f"{DOMAIN}_coordinators", {})
+    for host_name in hass.data[DOMAIN]:
+        coordinator = coordinators[host_name]
+        sensors.append(ZMAvailabilitySensor(coordinator, host_name))
     add_entities(sensors)
 
 
-class ZMAvailabilitySensor(BinarySensorEntity):
+class ZMAvailabilitySensor(CoordinatorEntity[ZmDataUpdateCoordinator], BinarySensorEntity):
     """Representation of the availability of ZoneMinder as a binary sensor."""
 
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
 
-    def __init__(self, host_name: str, client: ZoneMinder) -> None:
+    def __init__(self, coordinator: ZmDataUpdateCoordinator, host_name: str) -> None:
         """Initialize availability sensor."""
+        super().__init__(coordinator)
         self._attr_name = host_name
         self._attr_unique_id = f"{host_name}_availability"
         self._attr_device_info = DeviceInfo(
@@ -43,8 +46,10 @@ class ZMAvailabilitySensor(BinarySensorEntity):
             name=host_name,
             manufacturer="ZoneMinder",
         )
-        self._client = client
 
-    def update(self) -> None:
-        """Update the state of this sensor (availability of ZoneMinder)."""
-        self._attr_is_on = self._client.is_available
+    @property
+    def is_on(self) -> bool:
+        """Return True if ZoneMinder server is available."""
+        if data := self.coordinator.data:
+            return data.server_available
+        return False

@@ -16,6 +16,7 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 from zoneminder.monitor import Monitor, MonitorState, TimePeriod
 
 from custom_components.zoneminder.const import DOMAIN
+from custom_components.zoneminder.coordinator import ZmDataUpdateCoordinator
 from custom_components.zoneminder.sensor import setup_platform
 
 from .conftest import MOCK_HOST, create_mock_monitor, create_mock_zm_client
@@ -330,7 +331,8 @@ async def test_include_archived_flag(hass: HomeAssistant, single_server_config) 
     await _setup_zm_with_sensors(hass, single_server_config, monitors, sensor_config=sensor_config)
 
     # Verify get_events was called with include_archived=True
-    monitors[0].get_events.assert_called_with(TimePeriod.ALL, True)
+    # The coordinator fetches all time periods; check that the archived variant was included
+    monitors[0].get_events.assert_any_call(TimePeriod.ALL, True)
 
 
 def test_sensor_count_calculation(hass: HomeAssistant) -> None:
@@ -344,8 +346,10 @@ def test_sensor_count_calculation(hass: HomeAssistant) -> None:
         create_mock_monitor(monitor_id=2, name="Cam2"),
     ]
     client = create_mock_zm_client(monitors=monitors)
+    coordinator = ZmDataUpdateCoordinator(hass, client, monitors, MOCK_HOST)
     hass.data[DOMAIN] = {MOCK_HOST: client}
     hass.data[f"{DOMAIN}_monitors"] = {MOCK_HOST: monitors}
+    hass.data[f"{DOMAIN}_coordinators"] = {MOCK_HOST: coordinator}
 
     entities: list[SensorEntity] = []
     mock_add = MagicMock(side_effect=entities.extend)

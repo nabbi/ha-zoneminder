@@ -56,6 +56,7 @@ tox -e typing
 
 ### Key Files
 - `__init__.py` — YAML config schema, `async_setup()` entry point, ZM client creation
+- `coordinator.py` — `ZmDataUpdateCoordinator` shared by all entities per server
 - `camera.py` — MJPEG camera entities (one per ZM monitor)
 - `sensor.py` — Monitor status, event count, and run state sensors
 - `switch.py` — Monitor function toggle (on/off state)
@@ -68,7 +69,7 @@ tox -e typing
 - The `auto_enable_custom_integrations` autouse fixture in `conftest.py` ensures HA's loader picks up `custom_components/zoneminder/` instead of the built-in integration
 - All patch targets use `custom_components.zoneminder.*` (not `homeassistant.components.zoneminder.*`)
 - `from pytest_homeassistant_custom_component.common import async_fire_time_changed` replaces the core `tests.common` import
-- 87 passing tests, 2 xfailed (known bugs documented with BUG-XX markers)
+- 88 passing tests, 1 xfailed (known bugs documented with BUG-XX markers)
 
 ## Code Style
 

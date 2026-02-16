@@ -22,6 +22,7 @@ from zoneminder.exceptions import LoginError
 from zoneminder.zm import ZoneMinder
 
 from .const import DOMAIN
+from .coordinator import ZmDataUpdateCoordinator
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -93,6 +94,15 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     for host_name, zm_client in hass.data[DOMAIN].items():
         monitors_by_host[host_name] = await hass.async_add_executor_job(zm_client.get_monitors)
     hass.data[f"{DOMAIN}_monitors"] = monitors_by_host
+
+    # Create a shared coordinator per server (BUG-02)
+    coordinators: dict[str, ZmDataUpdateCoordinator] = {}
+    for host_name, zm_client in hass.data[DOMAIN].items():
+        monitors = monitors_by_host.get(host_name, [])
+        coordinator = ZmDataUpdateCoordinator(hass, zm_client, monitors, host_name)
+        await coordinator.async_refresh()
+        coordinators[host_name] = coordinator
+    hass.data[f"{DOMAIN}_coordinators"] = coordinators
 
     async_setup_services(hass)
 

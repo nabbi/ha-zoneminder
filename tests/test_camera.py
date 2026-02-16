@@ -13,8 +13,9 @@ from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.zoneminder.camera import ZoneMinderCamera, setup_platform
+from custom_components.zoneminder.camera import setup_platform
 from custom_components.zoneminder.const import DOMAIN
+from custom_components.zoneminder.coordinator import ZmDataUpdateCoordinator
 
 from .conftest import MOCK_HOST, create_mock_monitor, create_mock_zm_client
 
@@ -154,8 +155,10 @@ def test_filter_urllib3_logging_called(hass: HomeAssistant) -> None:
     """Test filter_urllib3_logging() is called in setup_platform."""
     monitors = [create_mock_monitor()]
     client = create_mock_zm_client(monitors=monitors)
+    coordinator = ZmDataUpdateCoordinator(hass, client, monitors, MOCK_HOST)
     hass.data[DOMAIN] = {MOCK_HOST: client}
     hass.data[f"{DOMAIN}_monitors"] = {MOCK_HOST: monitors}
+    hass.data[f"{DOMAIN}_coordinators"] = {MOCK_HOST: coordinator}
 
     with patch("custom_components.zoneminder.camera.filter_urllib3_logging") as mock_filter:
         setup_platform(hass, {}, MagicMock())
@@ -288,17 +291,16 @@ async def test_get_monitors_called_once(hass: HomeAssistant, single_server_confi
     assert client.get_monitors.call_count == 1
 
 
-@pytest.mark.xfail(reason="BUG-02: No DataUpdateCoordinator — each entity polls independently")
 async def test_coordinator_shared_updates(hass: HomeAssistant, single_server_config) -> None:
     """Entities should share a coordinator instead of polling independently.
 
-    Every entity polls the ZoneMinder API independently on each HA update cycle.
-    There is no shared coordinator or caching layer, resulting in ~14 API calls
-    per monitor per poll cycle.
-
-    With a coordinator, camera entities would set should_poll=False and
-    get data from the shared coordinator instead.
+    Camera entities set should_poll=False and get data from a shared
+    ZmDataUpdateCoordinator instead of polling the ZM API independently.
     """
-    # Desired: camera entities should use a coordinator (should_poll=False)
-    # Currently ZoneMinderCamera explicitly sets _attr_should_poll = True
-    assert ZoneMinderCamera._attr_should_poll is False
+    monitors = [create_mock_monitor(name="Coord Cam")]
+    await _setup_zm_with_cameras(hass, single_server_config, monitors)
+
+    entity = hass.data["entity_components"]["camera"].get_entity("camera.coord_cam")
+    assert entity is not None
+    assert entity.should_poll is False
+    assert hasattr(entity, "coordinator")
