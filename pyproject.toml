@@ -23,6 +23,7 @@ dev = [
     "PyTurboJPEG",
     "ruff",
     "mypy",
+    "types-requests",
     "tox",
     "tox-gh-actions",
 ]

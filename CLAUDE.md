@@ -102,10 +102,13 @@ ha-zoneminder–specific status.
 
 | ID | Description | Commit |
 |----|-------------|--------|
+| BUG-01 | `RequestsConnectionError` caught but `success` not set `False` | `f29dbb9` |
 | BUG-02 | No DataUpdateCoordinator — excessive API calls | `8285e06` |
 | BUG-05 | No `unique_id` on any entity | `cb74a1a` |
 | BUG-06 | `get_monitors()` called 3x — separate object trees | `242ad7e` |
+| BUG-07 | `LoginError` not caught during setup | `f29dbb9` |
 | BUG-10 | No `DeviceInfo` — entities not grouped | `eee8c6b` |
+| BUG-12 | zm-py exceptions unhandled across integration | *(this commit)* |
 
 ### Deferred — Feature Requests
 

@@ -7,8 +7,10 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from requests.exceptions import RequestException
 
+from zoneminder.exceptions import ZoneminderError
 from zoneminder.monitor import Monitor, MonitorState, TimePeriod
 from zoneminder.zm import ZoneMinder
 
@@ -62,22 +64,25 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
 
     def _fetch_all_data(self) -> ZmData:
         """Fetch all data synchronously (runs in executor thread)."""
-        data = ZmData()
+        try:
+            data = ZmData()
 
-        for monitor in self.zm_monitors:
-            monitor_data = ZmMonitorData(
-                function=monitor.function,
-                is_recording=monitor.is_recording,
-                is_available=monitor.is_available,
-            )
-            for time_period in TimePeriod:
-                for include_archived in (False, True):
-                    monitor_data.events[(time_period, include_archived)] = monitor.get_events(
-                        time_period, include_archived
-                    )
-            data.monitors[monitor.id] = monitor_data
+            for monitor in self.zm_monitors:
+                monitor_data = ZmMonitorData(
+                    function=monitor.function,
+                    is_recording=monitor.is_recording,
+                    is_available=monitor.is_available,
+                )
+                for time_period in TimePeriod:
+                    for include_archived in (False, True):
+                        monitor_data.events[(time_period, include_archived)] = monitor.get_events(
+                            time_period, include_archived
+                        )
+                data.monitors[monitor.id] = monitor_data
 
-        data.run_state = self.zm_client.get_active_state()
-        data.server_available = self.zm_client.is_available
+            data.run_state = self.zm_client.get_active_state()
+            data.server_available = self.zm_client.is_available
 
-        return data
+            return data
+        except (ZoneminderError, RequestException, KeyError) as err:
+            raise UpdateFailed(f"Error fetching ZoneMinder data: {err}") from err

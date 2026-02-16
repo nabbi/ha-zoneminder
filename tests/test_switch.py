@@ -20,6 +20,8 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from requests.exceptions import Timeout
+from zoneminder.exceptions import ZoneminderError
 from zoneminder.monitor import Monitor, MonitorState
 
 from custom_components.zoneminder.const import DOMAIN
@@ -204,6 +206,55 @@ async def test_switch_unique_id(
     entry = entity_registry.async_get("switch.front_door_state")
     assert entry is not None
     assert entry.unique_id is not None
+
+
+async def test_turn_on_api_error_logged(
+    hass: HomeAssistant, single_server_config, caplog: pytest.LogCaptureFixture
+) -> None:
+    """ZoneminderError during turn_on should be caught and logged."""
+    monitors = [create_mock_monitor(name="Front Door", function=MonitorState.MONITOR)]
+
+    def raise_on_set(self, value):
+        raise ZoneminderError("API error")
+
+    monitors[0].configure_mock(**{"function": MonitorState.MONITOR})
+    type(monitors[0]).function = property(lambda self: MonitorState.MONITOR, raise_on_set)
+
+    await _setup_zm_with_switches(hass, single_server_config, monitors)
+
+    await hass.services.async_call(
+        SWITCH_DOMAIN,
+        SERVICE_TURN_ON,
+        {ATTR_ENTITY_ID: "switch.front_door_state"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert "Error setting monitor" in caplog.text
+
+
+async def test_turn_off_request_timeout_logged(
+    hass: HomeAssistant, single_server_config, caplog: pytest.LogCaptureFixture
+) -> None:
+    """requests.Timeout during turn_off should be caught and logged."""
+    monitors = [create_mock_monitor(name="Front Door", function=MonitorState.MODECT)]
+
+    def raise_on_set(self, value):
+        raise Timeout("connection timed out")
+
+    type(monitors[0]).function = property(lambda self: MonitorState.MODECT, raise_on_set)
+
+    await _setup_zm_with_switches(hass, single_server_config, monitors)
+
+    await hass.services.async_call(
+        SWITCH_DOMAIN,
+        SERVICE_TURN_OFF,
+        {ATTR_ENTITY_ID: "switch.front_door_state"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert "Error setting monitor" in caplog.text
 
 
 async def test_function_read_no_side_effects(hass: HomeAssistant, single_server_config) -> None:

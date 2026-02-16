@@ -9,6 +9,8 @@ import voluptuous as vol
 from homeassistant.const import ATTR_ID, ATTR_NAME
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.setup import async_setup_component
+from requests.exceptions import Timeout
+from zoneminder.exceptions import ZoneminderError
 
 from custom_components.zoneminder.const import DOMAIN
 from custom_components.zoneminder.services import _set_active_state
@@ -127,3 +129,39 @@ async def test_set_run_state_invalid_host_graceful(
     )
 
     assert "Invalid ZoneMinder host provided" in caplog.text
+
+
+async def test_set_active_state_api_error_logged(
+    hass: HomeAssistant, single_server_config, caplog: pytest.LogCaptureFixture
+) -> None:
+    """ZoneminderError from set_active_state should be caught and logged."""
+    clients = await _setup_zm(hass, single_server_config)
+    clients[MOCK_HOST].set_active_state.side_effect = ZoneminderError("API error")
+
+    await hass.services.async_call(
+        DOMAIN,
+        "set_run_state",
+        {ATTR_ID: MOCK_HOST, ATTR_NAME: "Away"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert "Error setting ZoneMinder run state" in caplog.text
+
+
+async def test_set_active_state_request_timeout_logged(
+    hass: HomeAssistant, single_server_config, caplog: pytest.LogCaptureFixture
+) -> None:
+    """requests.Timeout from set_active_state should be caught and logged."""
+    clients = await _setup_zm(hass, single_server_config)
+    clients[MOCK_HOST].set_active_state.side_effect = Timeout("timed out")
+
+    await hass.services.async_call(
+        DOMAIN,
+        "set_run_state",
+        {ATTR_ID: MOCK_HOST, ATTR_NAME: "Away"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert "Error setting ZoneMinder run state" in caplog.text

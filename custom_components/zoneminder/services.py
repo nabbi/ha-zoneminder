@@ -6,6 +6,9 @@ import voluptuous as vol
 from homeassistant.const import ATTR_ID, ATTR_NAME
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import config_validation as cv
+from requests.exceptions import RequestException
+
+from zoneminder.exceptions import ZoneminderError
 
 from .const import DOMAIN
 
@@ -24,7 +27,17 @@ def _set_active_state(call: ServiceCall) -> None:
     if zm_id not in call.hass.data[DOMAIN]:
         _LOGGER.error("Invalid ZoneMinder host provided: %s", zm_id)
         return
-    if not call.hass.data[DOMAIN][zm_id].set_active_state(state_name):
+    try:
+        result = call.hass.data[DOMAIN][zm_id].set_active_state(state_name)
+    except (ZoneminderError, RequestException, KeyError) as err:
+        _LOGGER.error(
+            "Error setting ZoneMinder run state on %s to %s: %s",
+            zm_id,
+            state_name,
+            err,
+        )
+        return
+    if not result:
         _LOGGER.error(
             "Unable to change ZoneMinder state. Host: %s, state: %s",
             zm_id,

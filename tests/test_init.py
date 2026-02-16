@@ -9,7 +9,8 @@ from homeassistant.const import CONF_HOST, CONF_PATH, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 from requests.exceptions import ConnectionError as RequestsConnectionError
-from zoneminder.exceptions import LoginError
+from requests.exceptions import Timeout
+from zoneminder.exceptions import LoginError, ZoneminderError
 
 from custom_components.zoneminder.const import DOMAIN
 
@@ -290,3 +291,64 @@ async def test_login_error_exception_handling(
     # (like it does for ConnectionError: "ZoneMinder connection failure")
     assert "ZoneMinder" in caplog.text
     assert "LoginError" not in caplog.text  # Should not leak exception class names
+
+
+async def test_get_monitors_zoneminder_error_defaults_empty(
+    hass: HomeAssistant,
+    single_server_config,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """ZoneminderError from get_monitors() should default to empty list."""
+    client = create_mock_zm_client()
+    client.get_monitors.side_effect = ZoneminderError("API error")
+
+    with patch(
+        "custom_components.zoneminder.ZoneMinder",
+        return_value=client,
+    ):
+        assert await async_setup_component(hass, DOMAIN, single_server_config)
+        await hass.async_block_till_done()
+
+    assert hass.data[f"{DOMAIN}_monitors"][MOCK_HOST] == []
+    assert "Error fetching monitors" in caplog.text
+
+
+async def test_get_monitors_request_timeout_defaults_empty(
+    hass: HomeAssistant,
+    single_server_config,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """requests.Timeout from get_monitors() should default to empty list."""
+    client = create_mock_zm_client()
+    client.get_monitors.side_effect = Timeout("connection timed out")
+
+    with patch(
+        "custom_components.zoneminder.ZoneMinder",
+        return_value=client,
+    ):
+        assert await async_setup_component(hass, DOMAIN, single_server_config)
+        await hass.async_block_till_done()
+
+    assert hass.data[f"{DOMAIN}_monitors"][MOCK_HOST] == []
+    assert "Error fetching monitors" in caplog.text
+
+
+async def test_login_timeout_logged(
+    hass: HomeAssistant,
+    single_server_config,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """requests.Timeout during login should be caught and logged."""
+    client = create_mock_zm_client()
+    client.login.side_effect = Timeout("connection timed out")
+
+    with patch(
+        "custom_components.zoneminder.ZoneMinder",
+        return_value=client,
+    ):
+        result = await async_setup_component(hass, DOMAIN, single_server_config)
+        await hass.async_block_till_done()
+
+    assert "ZoneMinder connection failure" in caplog.text
+    assert "connection timed out" in caplog.text
+    assert result is True

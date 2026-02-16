@@ -19,7 +19,9 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from requests.exceptions import RequestException
 
+from zoneminder.exceptions import ZoneminderError
 from zoneminder.monitor import Monitor, MonitorState
 
 from .const import DOMAIN
@@ -104,4 +106,12 @@ class ZMSwitchMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntity)
 
     def _set_function(self, state: MonitorState) -> None:
         """Set monitor function (runs in executor)."""
-        self._monitor.function = state
+        try:
+            self._monitor.function = state
+        except (ZoneminderError, RequestException, KeyError) as err:
+            _LOGGER.error(
+                "Error setting monitor %s function to %s: %s",
+                self._monitor.name,
+                state,
+                err,
+            )

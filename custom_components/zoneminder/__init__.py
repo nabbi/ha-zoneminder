@@ -16,9 +16,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.discovery import async_load_platform
 from homeassistant.helpers.typing import ConfigType
-from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import RequestException
 
-from zoneminder.exceptions import LoginError
+from zoneminder.exceptions import LoginError, ZoneminderError
 from zoneminder.zm import ZoneMinder
 
 from .const import DOMAIN
@@ -75,7 +75,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
         try:
             success = await hass.async_add_executor_job(zm_client.login) and success
-        except RequestsConnectionError as ex:
+        except RequestException as ex:
             _LOGGER.error(
                 "ZoneMinder connection failure to %s: %s",
                 host_name,
@@ -92,7 +92,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     # Fetch monitors once for all platforms to share (BUG-06)
     monitors_by_host: dict[str, list] = {}
     for host_name, zm_client in hass.data[DOMAIN].items():
-        monitors_by_host[host_name] = await hass.async_add_executor_job(zm_client.get_monitors)
+        try:
+            monitors_by_host[host_name] = await hass.async_add_executor_job(zm_client.get_monitors)
+        except (ZoneminderError, RequestException, KeyError) as ex:
+            _LOGGER.error("Error fetching monitors from %s: %s", host_name, ex)
+            monitors_by_host[host_name] = []
     hass.data[f"{DOMAIN}_monitors"] = monitors_by_host
 
     # Create a shared coordinator per server (BUG-02)
