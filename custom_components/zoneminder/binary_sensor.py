@@ -7,6 +7,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
@@ -37,6 +38,11 @@ class ZMAvailabilitySensor(BinarySensorEntity):
         """Initialize availability sensor."""
         self._attr_name = host_name
         self._attr_unique_id = f"{host_name}_availability"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, host_name)},
+            name=host_name,
+            manufacturer="ZoneMinder",
+        )
         self._client = client
 
     def update(self) -> None:

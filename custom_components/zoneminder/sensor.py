@@ -15,6 +15,7 @@ from homeassistant.components.sensor import (
 from homeassistant.const import CONF_MONITORED_CONDITIONS
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
@@ -105,6 +106,12 @@ class ZMSensorMonitors(SensorEntity):
         self._attr_available = False
         self._attr_name = f"{self._monitor.name} Status"
         self._attr_unique_id = f"{host_name}_{monitor.id}_status"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
+            name=monitor.name,
+            manufacturer="ZoneMinder",
+            via_device=(DOMAIN, host_name),
+        )
 
     def update(self) -> None:
         """Update the sensor."""
@@ -135,6 +142,12 @@ class ZMSensorEvents(SensorEntity):
         self.time_period = TimePeriod.get_time_period(description.key)
         self._attr_name = f"{monitor.name} {self.time_period.title}"
         self._attr_unique_id = f"{host_name}_{monitor.id}_events_{description.key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
+            name=monitor.name,
+            manufacturer="ZoneMinder",
+            via_device=(DOMAIN, host_name),
+        )
 
     def update(self) -> None:
         """Update the sensor."""
@@ -151,6 +164,11 @@ class ZMSensorRunState(SensorEntity):
         self._attr_available = False
         self._client = client
         self._attr_unique_id = f"{host_name}_run_state"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, host_name)},
+            name=host_name,
+            manufacturer="ZoneMinder",
+        )
 
     def update(self) -> None:
         """Update the sensor."""

@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from homeassistant.components.camera import CameraState
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
@@ -180,26 +179,24 @@ async def test_camera_unique_id(
     assert entry.unique_id is not None
 
 
-@pytest.mark.xfail(reason="BUG-10: No DeviceInfo — entities not grouped under devices")
-async def test_camera_device_info(
-    hass: HomeAssistant, device_registry: dr.DeviceRegistry, single_server_config
-) -> None:
-    """Camera entities should be grouped under a device.
+async def test_camera_device_info(hass: HomeAssistant, single_server_config) -> None:
+    """Camera entities should provide device_info to group under a device.
 
-    No entity provides device_info. A monitor's camera, sensors, and switch
-    appear as unrelated entities in the HA UI with no device page.
+    Each monitor entity provides device_info so that camera, sensors, and switch
+    for the same monitor are grouped on a single device page in the HA UI.
+    Note: device registry integration requires config entries (future migration).
     """
     monitors = [create_mock_monitor(name="Front Door")]
     await _setup_zm_with_cameras(hass, single_server_config, monitors)
 
-    # There should be a device registered for this monitor
-    devices = dr.async_entries_for_config_entry(device_registry, DOMAIN)
-    # Fallback: check all devices since this is YAML-based (no config entry)
-    if not devices:
-        devices = list(device_registry.devices.values())
-
-    monitor_devices = [d for d in devices if any(DOMAIN in ident[0] for ident in d.identifiers)]
-    assert len(monitor_devices) > 0
+    entity = hass.data["entity_components"]["camera"].get_entity("camera.front_door")
+    assert entity is not None
+    info = entity.device_info
+    assert info is not None
+    assert (DOMAIN, f"{MOCK_HOST}_1") in info["identifiers"]
+    assert info["name"] == "Front Door"
+    assert info["manufacturer"] == "ZoneMinder"
+    assert info["via_device"] == (DOMAIN, MOCK_HOST)
 
 
 async def test_empty_server_does_not_raise_platform_not_ready(

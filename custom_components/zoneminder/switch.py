@@ -15,6 +15,7 @@ from homeassistant.components.switch import (
 from homeassistant.const import CONF_COMMAND_OFF, CONF_COMMAND_ON
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
@@ -65,6 +66,12 @@ class ZMSwitchMonitors(SwitchEntity):
         self._state: bool | None = None
         self._attr_name = f"{monitor.name} State"
         self._attr_unique_id = f"{host_name}_{monitor.id}_switch"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
+            name=monitor.name,
+            manufacturer="ZoneMinder",
+            via_device=(DOMAIN, host_name),
+        )
 
     def update(self) -> None:
         """Update the switch value."""

@@ -6,6 +6,7 @@ import logging
 
 from homeassistant.components.mjpeg import MjpegCamera, filter_urllib3_logging
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
@@ -49,6 +50,12 @@ class ZoneMinderCamera(MjpegCamera):
         self._attr_is_recording = False
         self._attr_available = False
         self._attr_unique_id = f"{host_name}_{monitor.id}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
+            name=monitor.name,
+            manufacturer="ZoneMinder",
+            via_device=(DOMAIN, host_name),
+        )
         self._monitor = monitor
 
     def update(self) -> None:
