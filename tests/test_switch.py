@@ -190,7 +190,6 @@ def test_platform_schema_requires_command_on_off() -> None:
         PLATFORM_SCHEMA({"platform": "zoneminder", "command_on": "Modect"})
 
 
-@pytest.mark.xfail(reason="BUG-05: No unique_id on any entity")
 async def test_switch_unique_id(
     hass: HomeAssistant, entity_registry: er.EntityRegistry, single_server_config
 ) -> None:

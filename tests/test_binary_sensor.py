@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import PropertyMock, patch
 
-import pytest
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.const import STATE_OFF, STATE_ON
 from homeassistant.core import HomeAssistant
@@ -131,7 +130,6 @@ async def test_binary_sensor_state_updates_on_poll(
     assert state.state == STATE_OFF
 
 
-@pytest.mark.xfail(reason="BUG-05: No unique_id on any entity")
 async def test_unique_id_set(
     hass: HomeAssistant, entity_registry: er.EntityRegistry, single_server_config
 ) -> None:

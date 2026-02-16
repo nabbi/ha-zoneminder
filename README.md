@@ -1,5 +1,7 @@
 # ha-zoneminder
 
+[![QA](https://github.com/nabbi/ha-zoneminder/actions/workflows/qa.yml/badge.svg)](https://github.com/nabbi/ha-zoneminder/actions/workflows/qa.yml)
+
 ZoneMinder custom integration for Home Assistant (HACS-compatible).
 
 This is an extracted and independently maintained version of the core ZoneMinder integration, giving full freedom to fix bugs, modernize architecture, and iterate independently.
@@ -23,25 +25,6 @@ zoneminder:
 ```
 
 See the [Home Assistant ZoneMinder documentation](https://www.home-assistant.io/integrations/zoneminder) for full configuration options.
-
-## Development
-
-```bash
-# Install dev dependencies
-pip install -e ".[dev]"
-
-# Run all QA checks
-tox
-
-# Run tests only
-tox -e py314
-
-# Run linting only
-tox -e lint
-
-# Run type checking only
-tox -e typing
-```
 
 ## License
 

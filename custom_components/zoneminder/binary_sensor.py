@@ -36,6 +36,7 @@ class ZMAvailabilitySensor(BinarySensorEntity):
     def __init__(self, host_name: str, client: ZoneMinder) -> None:
         """Initialize availability sensor."""
         self._attr_name = host_name
+        self._attr_unique_id = f"{host_name}_availability"
         self._client = client
 
     def update(self) -> None:
