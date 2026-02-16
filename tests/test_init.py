@@ -265,7 +265,6 @@ async def test_binary_sensor_platform_load_triggered(
     assert call_args[0][2] == DOMAIN
 
 
-@pytest.mark.xfail(reason="BUG-12: zm-py LoginError not caught by async_setup")
 async def test_login_error_exception_handling(
     hass: HomeAssistant,
     single_server_config,

@@ -18,6 +18,7 @@ from homeassistant.helpers.discovery import async_load_platform
 from homeassistant.helpers.typing import ConfigType
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
+from zoneminder.exceptions import LoginError
 from zoneminder.zm import ZoneMinder
 
 from .const import DOMAIN
@@ -79,6 +80,19 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 host_name,
                 ex,
             )
+        except LoginError as ex:
+            _LOGGER.error(
+                "ZoneMinder login failure to %s: %s",
+                host_name,
+                ex,
+            )
+            success = False
+
+    # Fetch monitors once for all platforms to share (BUG-06)
+    monitors_by_host: dict[str, list] = {}
+    for host_name, zm_client in hass.data[DOMAIN].items():
+        monitors_by_host[host_name] = await hass.async_add_executor_job(zm_client.get_monitors)
+    hass.data[f"{DOMAIN}_monitors"] = monitors_by_host
 
     async_setup_services(hass)
 
