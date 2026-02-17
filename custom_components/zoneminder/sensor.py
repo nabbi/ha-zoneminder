@@ -13,6 +13,7 @@ from homeassistant.const import CONF_MONITORED_CONDITIONS
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from zoneminder.monitor import Monitor, TimePeriod
@@ -27,6 +28,22 @@ from .coordinator import ZmDataUpdateCoordinator
 from .models import ZmEntryData
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
+    """Set up ZoneMinder sensor platform (deprecated YAML)."""
+    _LOGGER.warning(
+        "Configuration of the ZoneMinder sensor platform via YAML is deprecated "
+        "and will be removed in a future release. Your existing configuration has "
+        "been imported. Please remove 'sensor' entries for 'zoneminder' from your "
+        "configuration.yaml and restart Home Assistant"
+    )
+
 
 SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
