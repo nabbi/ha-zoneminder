@@ -383,10 +383,9 @@ async def test_sensor_unique_id(
 async def test_function_property_no_side_effects(hass: HomeAssistant, single_server_config) -> None:
     """Reading monitor.function should not trigger an HTTP request.
 
-    The zm-py Monitor.function property calls update_monitor() on every read,
-    which makes an HTTP GET to monitors/{id}.json. HA reads function from both
-    sensor.py and switch.py, so the same data is fetched multiple times.
-    With the 1s TTL cache, constructor data is used on first read.
+    BUG-03 resolved: Monitor.function is now a pure read from _raw_result.
+    The coordinator calls update_monitor() explicitly once per poll cycle.
+    This test verifies the property getter makes zero API calls.
     """
     stub_client = MagicMock()
     stub_client.verify_ssl = True

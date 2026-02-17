@@ -260,10 +260,9 @@ async def test_turn_off_request_timeout_logged(
 async def test_function_read_no_side_effects(hass: HomeAssistant, single_server_config) -> None:
     """Reading monitor.function should not trigger an HTTP request.
 
-    The zm-py Monitor.function property calls update_monitor() on every read,
-    which makes an HTTP GET to monitors/{id}.json. The switch platform reads
-    function to determine on/off state, triggering unnecessary API traffic.
-    With the 1s TTL cache, constructor data is used on first read.
+    BUG-03 resolved: Monitor.function is now a pure read from _raw_result.
+    The coordinator calls update_monitor() explicitly once per poll cycle.
+    This test verifies the property getter makes zero API calls.
     """
     stub_client = MagicMock()
     stub_client.verify_ssl = True

@@ -78,3 +78,22 @@ async def test_coordinator_recovers_after_failure(
     client.get_active_state.return_value = "Running"
     await coordinator.async_refresh()
     assert coordinator.last_update_success is True
+
+
+async def test_update_monitor_called_per_monitor(hass: HomeAssistant, single_server_config) -> None:
+    """Coordinator should call update_monitor() for each monitor during refresh.
+
+    BUG-03/BUG-04: Monitor properties are now pure reads from _raw_result.
+    The coordinator is responsible for refreshing monitor data explicitly.
+    """
+    monitors = [create_mock_monitor(monitor_id=1), create_mock_monitor(monitor_id=2, name="Yard")]
+    coordinator, _client = await _setup_and_get_coordinator(hass, single_server_config, monitors)
+
+    # Reset call counts from initial setup refresh
+    for mon in monitors:
+        mon.update_monitor.reset_mock()
+
+    await coordinator.async_refresh()
+
+    for mon in monitors:
+        mon.update_monitor.assert_called_once()

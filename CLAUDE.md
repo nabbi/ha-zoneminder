@@ -90,7 +90,7 @@ Do not ask the user to commit until all four pass. Fix any failures first.
 
 ## Dependencies
 
-- Runtime: `zm-py==0.5.5.dev5`, `homeassistant`
+- Runtime: `zm-py==0.5.5.dev6`, `homeassistant`
 - Test: `pytest-homeassistant-custom-component` (pulls in HA core + test fixtures)
 
 ## Bug & Feature Tracking
@@ -108,7 +108,9 @@ ha-zoneminder–specific status.
 | BUG-06 | `get_monitors()` called 3x — separate object trees | `242ad7e` |
 | BUG-07 | `LoginError` not caught during setup | `f29dbb9` |
 | BUG-10 | No `DeviceInfo` — entities not grouped | `eee8c6b` |
-| BUG-12 | zm-py exceptions unhandled across integration | *(this commit)* |
+| BUG-03 | `Monitor.function` getter calls `update_monitor()` — hidden I/O | *(this commit)* |
+| BUG-04 | `Monitor.is_available` calls `update_monitor()` — redundant I/O | *(this commit)* |
+| BUG-12 | zm-py exceptions unhandled across integration | `0fda937` |
 
 ### Deferred — Feature Requests
 
