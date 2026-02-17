@@ -24,11 +24,18 @@ def _set_active_state(call: ServiceCall) -> None:
     """Set the ZoneMinder run state to the given state name."""
     zm_id = call.data[ATTR_ID]
     state_name = call.data[ATTR_NAME]
-    if zm_id not in call.hass.data[DOMAIN]:
+
+    host_map: dict[str, str] = call.hass.data.get(f"{DOMAIN}_host_map", {})
+    entry_id = host_map.get(zm_id)
+    if entry_id is None:
         _LOGGER.error("Invalid ZoneMinder host provided: %s", zm_id)
         return
+
+    from .models import ZmEntryData
+
+    entry_data: ZmEntryData = call.hass.data[DOMAIN][entry_id]
     try:
-        result = call.hass.data[DOMAIN][zm_id].set_active_state(state_name)
+        result = entry_data.client.set_active_state(state_name)
     except (ZoneminderError, RequestException, KeyError) as err:
         _LOGGER.error(
             "Error setting ZoneMinder run state on %s to %s: %s",
@@ -48,6 +55,8 @@ def _set_active_state(call: ServiceCall) -> None:
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register ZoneMinder services."""
+    if hass.services.has_service(DOMAIN, SERVICE_SET_RUN_STATE):
+        return
     hass.services.async_register(
         DOMAIN, SERVICE_SET_RUN_STATE, _set_active_state, schema=SET_RUN_STATE_SCHEMA
     )

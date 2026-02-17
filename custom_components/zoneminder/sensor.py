@@ -4,32 +4,29 @@ from __future__ import annotations
 
 import logging
 
-import voluptuous as vol
-from homeassistant.components.sensor import (
-    PLATFORM_SCHEMA as SENSOR_PLATFORM_SCHEMA,
-)
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorEntityDescription,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_MONITORED_CONDITIONS
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from zoneminder.monitor import Monitor, TimePeriod
 
-from .const import DOMAIN
+from .const import (
+    CONF_INCLUDE_ARCHIVED,
+    DEFAULT_INCLUDE_ARCHIVED,
+    DEFAULT_MONITORED_CONDITIONS,
+    DOMAIN,
+)
 from .coordinator import ZmDataUpdateCoordinator
+from .models import ZmEntryData
 
 _LOGGER = logging.getLogger(__name__)
-
-CONF_INCLUDE_ARCHIVED = "include_archived"
-
-DEFAULT_INCLUDE_ARCHIVED = False
 
 SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
@@ -56,54 +53,39 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
 
 SENSOR_KEYS: list[str] = [desc.key for desc in SENSOR_TYPES]
 
-PLATFORM_SCHEMA = SENSOR_PLATFORM_SCHEMA.extend(
-    {
-        vol.Optional(CONF_INCLUDE_ARCHIVED, default=DEFAULT_INCLUDE_ARCHIVED): cv.boolean,
-        vol.Optional(CONF_MONITORED_CONDITIONS, default=["all"]): vol.All(
-            cv.ensure_list, [vol.In(SENSOR_KEYS)]
-        ),
-    }
-)
 
-
-async def async_setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
-    add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the ZoneMinder sensor platform."""
-    include_archived = config[CONF_INCLUDE_ARCHIVED]
-    monitored_conditions = config[CONF_MONITORED_CONDITIONS]
+    entry_data: ZmEntryData = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry_data.coordinator
+    monitors = entry_data.monitors
+    host_name = entry_data.host_name
 
-    # Only fetch the event queries that configured sensors will consume
+    include_archived = entry.options.get(CONF_INCLUDE_ARCHIVED, DEFAULT_INCLUDE_ARCHIVED)
+    monitored_conditions = entry.options.get(
+        CONF_MONITORED_CONDITIONS, DEFAULT_MONITORED_CONDITIONS
+    )
+
     event_queries: set[tuple[TimePeriod, bool]] = {
         (TimePeriod.get_time_period(key), include_archived) for key in monitored_conditions
     }
+    coordinator.register_event_queries(event_queries)
 
     sensors: list[SensorEntity] = []
-    zm_monitors = hass.data.get(f"{DOMAIN}_monitors", {})
-    coordinators = hass.data.get(f"{DOMAIN}_coordinators", {})
-    for host_name, _zm_client in hass.data[DOMAIN].items():
-        coordinator = coordinators[host_name]
-        coordinator.register_event_queries(event_queries)
-        monitors = zm_monitors.get(host_name, [])
-        if not monitors:
-            continue
+    for monitor in monitors:
+        sensors.append(ZMSensorMonitors(coordinator, monitor, host_name))
+        sensors.extend(
+            ZMSensorEvents(coordinator, monitor, include_archived, description, host_name)
+            for description in SENSOR_TYPES
+            if description.key in monitored_conditions
+        )
 
-        for monitor in monitors:
-            sensors.append(ZMSensorMonitors(coordinator, monitor, host_name))
-
-            sensors.extend(
-                [
-                    ZMSensorEvents(coordinator, monitor, include_archived, description, host_name)
-                    for description in SENSOR_TYPES
-                    if description.key in monitored_conditions
-                ]
-            )
-
-        sensors.append(ZMSensorRunState(coordinator, host_name))
-    add_entities(sensors)
+    sensors.append(ZMSensorRunState(coordinator, host_name))
+    async_add_entities(sensors)
 
 
 class ZMSensorMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity):

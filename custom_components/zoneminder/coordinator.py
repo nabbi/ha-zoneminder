@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from requests.exceptions import RequestException
@@ -47,6 +48,7 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
         client: ZoneMinder,
         monitors: list[Monitor],
         host_name: str,
+        config_entry: ConfigEntry | None = None,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -54,6 +56,7 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
             _LOGGER,
             name=f"ZoneMinder ({host_name})",
             update_interval=SCAN_INTERVAL,
+            config_entry=config_entry,
         )
         self.zm_client = client
         self.zm_monitors = monitors

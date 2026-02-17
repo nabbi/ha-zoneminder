@@ -3,6 +3,7 @@
 import logging
 
 import voluptuous as vol
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import (
     CONF_HOST,
     CONF_PASSWORD,
@@ -10,30 +11,31 @@ from homeassistant.const import (
     CONF_SSL,
     CONF_USERNAME,
     CONF_VERIFY_SSL,
-    Platform,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.discovery import async_load_platform
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.typing import ConfigType
 from requests.exceptions import RequestException
 
 from zoneminder.exceptions import LoginError, ZoneminderError
 from zoneminder.zm import ZoneMinder
 
-from .const import DOMAIN
+from .const import (
+    CONF_PATH_ZMS,
+    DEFAULT_PATH,
+    DEFAULT_PATH_ZMS,
+    DEFAULT_SSL,
+    DEFAULT_VERIFY_SSL,
+    DOMAIN,
+    PLATFORMS,
+)
 from .coordinator import ZmDataUpdateCoordinator
+from .models import ZmEntryData
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
-
-CONF_PATH_ZMS = "path_zms"
-
-DEFAULT_PATH = "/zm/"
-DEFAULT_PATH_ZMS = "/zm/cgi-bin/nph-zms"
-DEFAULT_SSL = False
-DEFAULT_TIMEOUT = 10
-DEFAULT_VERIFY_SSL = True
 
 HOST_CONFIG_SCHEMA = vol.Schema(
     {
@@ -53,64 +55,102 @@ CONFIG_SCHEMA = vol.Schema(
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the ZoneMinder component."""
-    hass.data[DOMAIN] = {}
-
-    success = True
+    """Set up the ZoneMinder component from YAML (import only)."""
+    if DOMAIN not in config:
+        return True
 
     for conf in config[DOMAIN]:
-        protocol = "https" if conf[CONF_SSL] else "http"
-
-        host_name = conf[CONF_HOST]
-        server_origin = f"{protocol}://{host_name}"
-        zm_client = ZoneMinder(
-            server_origin,
-            conf.get(CONF_USERNAME),
-            conf.get(CONF_PASSWORD),
-            conf.get(CONF_PATH),
-            conf.get(CONF_PATH_ZMS),
-            conf.get(CONF_VERIFY_SSL),
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": SOURCE_IMPORT},
+                data=conf,
+            )
         )
-        hass.data[DOMAIN][host_name] = zm_client
 
-        try:
-            success = await hass.async_add_executor_job(zm_client.login) and success
-        except RequestException as ex:
-            _LOGGER.error(
-                "ZoneMinder connection failure to %s: %s",
-                host_name,
-                ex,
-            )
-            success = False
-        except LoginError as ex:
-            _LOGGER.error(
-                "ZoneMinder login failure to %s: %s",
-                host_name,
-                ex,
-            )
-            success = False
+    return True
 
-    # Fetch monitors once for all platforms to share (BUG-06)
-    monitors_by_host: dict[str, list] = {}
-    for host_name, zm_client in hass.data[DOMAIN].items():
-        try:
-            monitors_by_host[host_name] = await hass.async_add_executor_job(zm_client.get_monitors)
-        except (ZoneminderError, RequestException, KeyError) as ex:
-            _LOGGER.error("Error fetching monitors from %s: %s", host_name, ex)
-            monitors_by_host[host_name] = []
-    hass.data[f"{DOMAIN}_monitors"] = monitors_by_host
 
-    # Create a shared coordinator per server (BUG-02)
-    coordinators: dict[str, ZmDataUpdateCoordinator] = {}
-    for host_name, zm_client in hass.data[DOMAIN].items():
-        monitors = monitors_by_host.get(host_name, [])
-        coordinator = ZmDataUpdateCoordinator(hass, zm_client, monitors, host_name)
-        await coordinator.async_refresh()
-        coordinators[host_name] = coordinator
-    hass.data[f"{DOMAIN}_coordinators"] = coordinators
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up ZoneMinder from a config entry."""
+    conf = entry.data
+    host_name = conf[CONF_HOST]
+    protocol = "https" if conf.get(CONF_SSL, DEFAULT_SSL) else "http"
+    server_origin = f"{protocol}://{host_name}"
+
+    zm_client = ZoneMinder(
+        server_origin,
+        conf.get(CONF_USERNAME),
+        conf.get(CONF_PASSWORD),
+        conf.get(CONF_PATH, DEFAULT_PATH),
+        conf.get(CONF_PATH_ZMS, DEFAULT_PATH_ZMS),
+        conf.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+    )
+
+    try:
+        result = await hass.async_add_executor_job(zm_client.login)
+    except (RequestException, LoginError, ZoneminderError) as ex:
+        raise ConfigEntryNotReady(f"Cannot connect to ZoneMinder at {host_name}: {ex}") from ex
+
+    if not result:
+        raise ConfigEntryNotReady(f"Login failed for ZoneMinder at {host_name}")
+
+    try:
+        monitors = await hass.async_add_executor_job(zm_client.get_monitors)
+    except (ZoneminderError, RequestException, KeyError) as ex:
+        _LOGGER.error("Error fetching monitors from %s: %s", host_name, ex)
+        monitors = []
+
+    coordinator = ZmDataUpdateCoordinator(hass, zm_client, monitors, host_name, config_entry=entry)
+    await coordinator.async_config_entry_first_refresh()
+
+    entry_data = ZmEntryData(
+        client=zm_client,
+        coordinator=coordinator,
+        monitors=monitors,
+        host_name=host_name,
+    )
+
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = entry_data
+
+    host_map: dict[str, str] = hass.data.setdefault(f"{DOMAIN}_host_map", {})
+    host_map[host_name] = entry.entry_id
 
     async_setup_services(hass)
 
-    hass.async_create_task(async_load_platform(hass, Platform.BINARY_SENSOR, DOMAIN, {}, config))
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    return success
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+
+    if entry.source == SOURCE_IMPORT:
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            f"yaml_import_{host_name}",
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="yaml_import",
+            translation_placeholders={"host": host_name},
+        )
+
+    return True
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update — reload the entry."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a ZoneMinder config entry."""
+    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        entry_data: ZmEntryData = hass.data[DOMAIN].pop(entry.entry_id)
+
+        host_map: dict[str, str] = hass.data.get(f"{DOMAIN}_host_map", {})
+        host_map.pop(entry_data.host_name, None)
+
+        if not hass.data[DOMAIN]:
+            hass.data.pop(DOMAIN)
+            hass.data.pop(f"{DOMAIN}_host_map", None)
+
+    return unload_ok

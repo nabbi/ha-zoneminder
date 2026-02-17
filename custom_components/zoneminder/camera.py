@@ -5,37 +5,41 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.mjpeg import MjpegCamera, filter_urllib3_logging
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from zoneminder.monitor import Monitor
 
 from .const import DOMAIN
 from .coordinator import ZmDataUpdateCoordinator
+from .models import ZmEntryData
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
-    add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the ZoneMinder cameras."""
     filter_urllib3_logging()
+    entry_data: ZmEntryData = hass.data[DOMAIN][entry.entry_id]
     cameras = []
-    zm_monitors = hass.data.get(f"{DOMAIN}_monitors", {})
-    coordinators = hass.data.get(f"{DOMAIN}_coordinators", {})
-    for host_name, zm_client in hass.data[DOMAIN].items():
-        coordinator = coordinators[host_name]
-        for monitor in zm_monitors.get(host_name, []):
-            _LOGGER.debug("Initializing camera %s", monitor.id)
-            cameras.append(ZoneMinderCamera(coordinator, monitor, zm_client.verify_ssl, host_name))
-    add_entities(cameras)
+    for monitor in entry_data.monitors:
+        _LOGGER.debug("Initializing camera %s", monitor.id)
+        cameras.append(
+            ZoneMinderCamera(
+                entry_data.coordinator,
+                monitor,
+                entry_data.client.verify_ssl,
+                entry_data.host_name,
+            )
+        )
+    async_add_entities(cameras)
 
 
 class ZoneMinderCamera(CoordinatorEntity[ZmDataUpdateCoordinator], MjpegCamera):

@@ -5,8 +5,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
+from homeassistant.config_entries import SOURCE_USER
 from homeassistant.const import (
     CONF_HOST,
+    CONF_MONITORED_CONDITIONS,
     CONF_PASSWORD,
     CONF_PATH,
     CONF_SSL,
@@ -14,12 +16,22 @@ from homeassistant.const import (
     CONF_VERIFY_SSL,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.setup import async_setup_component
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 from zoneminder.monitor import MonitorState, TimePeriod
 
-from custom_components.zoneminder.const import DOMAIN
-
-CONF_PATH_ZMS = "path_zms"
+from custom_components.zoneminder.const import (
+    CONF_INCLUDE_ARCHIVED,
+    CONF_PATH_ZMS,
+    DEFAULT_COMMAND_OFF,
+    DEFAULT_COMMAND_ON,
+    DEFAULT_INCLUDE_ARCHIVED,
+    DEFAULT_MONITORED_CONDITIONS,
+    DEFAULT_PATH,
+    DEFAULT_PATH_ZMS,
+    DEFAULT_SSL,
+    DEFAULT_VERIFY_SSL,
+    DOMAIN,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -29,6 +41,60 @@ def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
 
 MOCK_HOST = "zm.example.com"
 MOCK_HOST_2 = "zm2.example.com"
+
+MOCK_ENTRY_DATA = {
+    CONF_HOST: MOCK_HOST,
+    CONF_USERNAME: "admin",
+    CONF_PASSWORD: "secret",
+    CONF_SSL: DEFAULT_SSL,
+    CONF_PATH: DEFAULT_PATH,
+    CONF_PATH_ZMS: DEFAULT_PATH_ZMS,
+    CONF_VERIFY_SSL: DEFAULT_VERIFY_SSL,
+}
+
+MOCK_ENTRY_OPTIONS = {
+    CONF_INCLUDE_ARCHIVED: DEFAULT_INCLUDE_ARCHIVED,
+    CONF_MONITORED_CONDITIONS: DEFAULT_MONITORED_CONDITIONS,
+    "command_on": DEFAULT_COMMAND_ON,
+    "command_off": DEFAULT_COMMAND_OFF,
+}
+
+
+@pytest.fixture
+def mock_config_entry() -> MockConfigEntry:
+    """Return a MockConfigEntry for ZoneMinder."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        title=MOCK_HOST,
+        data=MOCK_ENTRY_DATA,
+        options=MOCK_ENTRY_OPTIONS,
+        unique_id=MOCK_HOST,
+        source=SOURCE_USER,
+    )
+
+
+@pytest.fixture
+def mock_config_entry_2() -> MockConfigEntry:
+    """Return a second MockConfigEntry for multi-server tests."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        title=MOCK_HOST_2,
+        data={
+            CONF_HOST: MOCK_HOST_2,
+            CONF_USERNAME: "user2",
+            CONF_PASSWORD: "pass2",
+            CONF_SSL: True,
+            CONF_VERIFY_SSL: False,
+            CONF_PATH: "/zoneminder/",
+            CONF_PATH_ZMS: "/zoneminder/cgi-bin/nph-zms",
+        },
+        options=MOCK_ENTRY_OPTIONS,
+        unique_id=MOCK_HOST_2,
+        source=SOURCE_USER,
+    )
+
+
+# --- YAML config fixtures (for config validation tests) ---
 
 
 @pytest.fixture
@@ -210,19 +276,31 @@ def mock_zm_client():
     return create_mock_zm_client
 
 
-@pytest.fixture
-async def setup_zm(hass: HomeAssistant, single_server_config, two_monitors) -> MagicMock:
-    """Set up the ZoneMinder component with mocked client and monitors.
+async def setup_entry(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    monitors: list | None = None,
+    is_available: bool = True,
+    active_state: str | None = "Running",
+    zm_version: str | None = "1.38.0",
+    verify_ssl: bool = True,
+) -> MagicMock:
+    """Set up a ZoneMinder config entry and return the mock client."""
+    client = create_mock_zm_client(
+        monitors=monitors or [],
+        is_available=is_available,
+        active_state=active_state,
+        zm_version=zm_version,
+        verify_ssl=verify_ssl,
+    )
 
-    Returns the mock ZM client for further assertions.
-    """
-    client = create_mock_zm_client(monitors=two_monitors)
+    entry.add_to_hass(hass)
 
     with patch(
         "custom_components.zoneminder.ZoneMinder",
         return_value=client,
     ):
-        assert await async_setup_component(hass, DOMAIN, single_server_config)
+        await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
     return client

@@ -5,59 +5,46 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import voluptuous as vol
-from homeassistant.components.switch import (
-    PLATFORM_SCHEMA as SWITCH_PLATFORM_SCHEMA,
-)
-from homeassistant.components.switch import (
-    SwitchEntity,
-)
-from homeassistant.const import CONF_COMMAND_OFF, CONF_COMMAND_ON
+from homeassistant.components.switch import SwitchEntity
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from requests.exceptions import RequestException
 
 from zoneminder.exceptions import ZoneminderError
 from zoneminder.monitor import Monitor, MonitorState
 
-from .const import DOMAIN
+from .const import DEFAULT_COMMAND_OFF, DEFAULT_COMMAND_ON, DOMAIN
 from .coordinator import ZmDataUpdateCoordinator
+from .models import ZmEntryData
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORM_SCHEMA = SWITCH_PLATFORM_SCHEMA.extend(
-    {
-        vol.Required(CONF_COMMAND_ON): cv.string,
-        vol.Required(CONF_COMMAND_OFF): cv.string,
-    }
-)
+CONF_COMMAND_ON = "command_on"
+CONF_COMMAND_OFF = "command_off"
 
 
-async def async_setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
-    add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the ZoneMinder switch platform."""
-    on_state = MonitorState(config.get(CONF_COMMAND_ON))
-    off_state = MonitorState(config.get(CONF_COMMAND_OFF))
+    entry_data: ZmEntryData = hass.data[DOMAIN][entry.entry_id]
+
+    on_state = MonitorState(entry.options.get(CONF_COMMAND_ON, DEFAULT_COMMAND_ON))
+    off_state = MonitorState(entry.options.get(CONF_COMMAND_OFF, DEFAULT_COMMAND_OFF))
 
     switches: list[ZMSwitchMonitors] = []
-    zm_monitors = hass.data.get(f"{DOMAIN}_monitors", {})
-    coordinators = hass.data.get(f"{DOMAIN}_coordinators", {})
-    for host_name, _zm_client in hass.data[DOMAIN].items():
-        coordinator = coordinators[host_name]
-        monitors = zm_monitors.get(host_name, [])
-        switches.extend(
-            ZMSwitchMonitors(coordinator, monitor, on_state, off_state, host_name)
-            for monitor in monitors
+    for monitor in entry_data.monitors:
+        switches.append(
+            ZMSwitchMonitors(
+                entry_data.coordinator, monitor, on_state, off_state, entry_data.host_name
+            )
         )
-    add_entities(switches)
+    async_add_entities(switches)
 
 
 class ZMSwitchMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntity):

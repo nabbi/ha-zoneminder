@@ -5,344 +5,198 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-from homeassistant.const import CONF_HOST, CONF_PATH, Platform
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
-from homeassistant.setup import async_setup_component
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import Timeout
 from zoneminder.exceptions import LoginError, ZoneminderError
 
 from custom_components.zoneminder.const import DOMAIN
 
-from .conftest import MOCK_HOST, MOCK_HOST_2, create_mock_zm_client
-
-CONF_PATH_ZMS = "path_zms"
+from .conftest import MOCK_HOST, MOCK_HOST_2, create_mock_zm_client, setup_entry
 
 
-async def test_client_stored_in_hass_data(hass: HomeAssistant, single_server_config) -> None:
-    """Test ZM client is stored in hass.data[DOMAIN][hostname]."""
-    client = create_mock_zm_client()
-
-    with patch(
-        "custom_components.zoneminder.ZoneMinder",
-        return_value=client,
-    ):
-        assert await async_setup_component(hass, DOMAIN, single_server_config)
-        await hass.async_block_till_done()
-
-    assert MOCK_HOST in hass.data[DOMAIN]
-    assert hass.data[DOMAIN][MOCK_HOST] is client
-
-
-async def test_constructor_called_with_http_prefix(
-    hass: HomeAssistant,
+async def test_entry_setup_stores_data(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, two_monitors
 ) -> None:
-    """Test ZM constructor called with http prefix when ssl=false."""
-    client = create_mock_zm_client()
-    config = {DOMAIN: [{CONF_HOST: MOCK_HOST}]}
+    """Test config entry setup stores ZmEntryData in hass.data."""
+    await setup_entry(hass, mock_config_entry, monitors=two_monitors)
 
-    with patch(
-        "custom_components.zoneminder.ZoneMinder",
-        return_value=client,
-    ) as mock_cls:
-        assert await async_setup_component(hass, DOMAIN, config)
-        await hass.async_block_till_done()
-
-    mock_cls.assert_called_once_with(
-        f"http://{MOCK_HOST}",
-        None,  # username
-        None,  # password
-        "/zm/",  # default path
-        "/zm/cgi-bin/nph-zms",  # default path_zms
-        True,  # default verify_ssl
-    )
+    assert mock_config_entry.entry_id in hass.data[DOMAIN]
+    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
+    assert entry_data.host_name == MOCK_HOST
+    assert entry_data.client is not None
+    assert entry_data.coordinator is not None
+    assert len(entry_data.monitors) == 2
 
 
-async def test_constructor_called_with_https_prefix(hass: HomeAssistant, ssl_config) -> None:
-    """Test ZM constructor called with https prefix when ssl=true."""
-    client = create_mock_zm_client()
-
-    with patch(
-        "custom_components.zoneminder.ZoneMinder",
-        return_value=client,
-    ) as mock_cls:
-        assert await async_setup_component(hass, DOMAIN, ssl_config)
-        await hass.async_block_till_done()
-
-    call_args = mock_cls.call_args
-    assert call_args[0][0] == f"https://{MOCK_HOST}"
-
-
-async def test_constructor_called_with_auth(hass: HomeAssistant, single_server_config) -> None:
-    """Test ZM constructor called with correct username/password."""
-    client = create_mock_zm_client()
-
-    with patch(
-        "custom_components.zoneminder.ZoneMinder",
-        return_value=client,
-    ) as mock_cls:
-        assert await async_setup_component(hass, DOMAIN, single_server_config)
-        await hass.async_block_till_done()
-
-    call_args = mock_cls.call_args
-    assert call_args[0][1] == "admin"
-    assert call_args[0][2] == "secret"
-
-
-async def test_constructor_called_with_paths(
-    hass: HomeAssistant,
+async def test_entry_setup_creates_host_map(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test ZM constructor called with custom paths."""
-    client = create_mock_zm_client()
-    config = {
-        DOMAIN: [
-            {
-                CONF_HOST: MOCK_HOST,
-                CONF_PATH: "/custom/",
-                CONF_PATH_ZMS: "/custom/zms",
-            }
-        ]
-    }
+    """Test config entry setup populates host_map for service lookups."""
+    await setup_entry(hass, mock_config_entry)
 
-    with patch(
-        "custom_components.zoneminder.ZoneMinder",
-        return_value=client,
-    ) as mock_cls:
-        assert await async_setup_component(hass, DOMAIN, config)
-        await hass.async_block_till_done()
-
-    call_args = mock_cls.call_args
-    assert call_args[0][3] == "/custom/"
-    assert call_args[0][4] == "/custom/zms"
+    host_map = hass.data[f"{DOMAIN}_host_map"]
+    assert host_map[MOCK_HOST] == mock_config_entry.entry_id
 
 
-async def test_login_called_in_executor(hass: HomeAssistant, single_server_config) -> None:
-    """Test login() is called during setup."""
-    client = create_mock_zm_client()
-
-    with patch(
-        "custom_components.zoneminder.ZoneMinder",
-        return_value=client,
-    ):
-        assert await async_setup_component(hass, DOMAIN, single_server_config)
-        await hass.async_block_till_done()
-
+async def test_entry_setup_login_called(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test login() is called during entry setup."""
+    client = await setup_entry(hass, mock_config_entry)
     client.login.assert_called_once()
 
 
-async def test_login_success_returns_true(hass: HomeAssistant, single_server_config) -> None:
-    """Test async_setup returns True on login success."""
-    client = create_mock_zm_client(login_success=True)
-
-    with patch(
-        "custom_components.zoneminder.ZoneMinder",
-        return_value=client,
-    ):
-        result = await async_setup_component(hass, DOMAIN, single_server_config)
-        await hass.async_block_till_done()
-
-    assert result is True
-
-
-async def test_login_failure_returns_false(hass: HomeAssistant, single_server_config) -> None:
-    """Test async_setup returns False on login failure."""
-    client = create_mock_zm_client(login_success=False)
-
-    with patch(
-        "custom_components.zoneminder.ZoneMinder",
-        return_value=client,
-    ):
-        await async_setup_component(hass, DOMAIN, single_server_config)
-        await hass.async_block_till_done()
-
-
-async def test_connection_error_logged(
-    hass: HomeAssistant,
-    single_server_config,
-    caplog: pytest.LogCaptureFixture,
+async def test_entry_setup_login_failure_not_ready(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test RequestsConnectionError is logged and fails setup."""
+    """Test config entry raises ConfigEntryNotReady on login failure."""
+    client = create_mock_zm_client(login_success=False)
+    mock_config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.zoneminder.ZoneMinder",
+        return_value=client,
+    ):
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def test_entry_setup_connection_error_not_ready(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test config entry raises ConfigEntryNotReady on connection error."""
     client = create_mock_zm_client()
     client.login.side_effect = RequestsConnectionError("Connection refused")
+    mock_config_entry.add_to_hass(hass)
 
     with patch(
         "custom_components.zoneminder.ZoneMinder",
         return_value=client,
     ):
-        result = await async_setup_component(hass, DOMAIN, single_server_config)
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    assert "ZoneMinder connection failure" in caplog.text
-    assert "Connection refused" in caplog.text
-    assert result is False
+    assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
 
 
-async def test_multi_server_both_clients_stored(hass: HomeAssistant, multi_server_config) -> None:
-    """Test both clients stored in hass.data for multi-server config."""
-    clients = []
-
-    def make_client(*args, **kwargs):
-        c = create_mock_zm_client()
-        clients.append(c)
-        return c
-
-    with patch(
-        "custom_components.zoneminder.ZoneMinder",
-        side_effect=make_client,
-    ):
-        assert await async_setup_component(hass, DOMAIN, multi_server_config)
-        await hass.async_block_till_done()
-
-    assert len(hass.data[DOMAIN]) == 2
-    assert MOCK_HOST in hass.data[DOMAIN]
-    assert MOCK_HOST_2 in hass.data[DOMAIN]
-
-
-async def test_multi_server_one_login_fail(hass: HomeAssistant, multi_server_config) -> None:
-    """Test one login failure with multi-server config."""
-    call_count = 0
-
-    def make_client(*args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            return create_mock_zm_client(login_success=True)
-        return create_mock_zm_client(login_success=False)
-
-    with patch(
-        "custom_components.zoneminder.ZoneMinder",
-        side_effect=make_client,
-    ):
-        await async_setup_component(hass, DOMAIN, multi_server_config)
-        await hass.async_block_till_done()
-
-    # Both clients should still be stored even if one fails login
-    assert len(hass.data[DOMAIN]) == 2
-
-
-async def test_async_setup_services_invoked(hass: HomeAssistant, single_server_config) -> None:
-    """Test async_setup_services is called during setup."""
-    client = create_mock_zm_client()
-
-    with (
-        patch(
-            "custom_components.zoneminder.ZoneMinder",
-            return_value=client,
-        ),
-        patch("custom_components.zoneminder.async_setup_services") as mock_services,
-    ):
-        assert await async_setup_component(hass, DOMAIN, single_server_config)
-        await hass.async_block_till_done()
-
-    mock_services.assert_called_once_with(hass)
-
-
-async def test_binary_sensor_platform_load_triggered(
-    hass: HomeAssistant, single_server_config
+async def test_entry_setup_login_error_not_ready(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test binary sensor platform load is triggered during setup."""
-    client = create_mock_zm_client()
-
-    with (
-        patch(
-            "custom_components.zoneminder.ZoneMinder",
-            return_value=client,
-        ),
-        patch("custom_components.zoneminder.async_load_platform") as mock_load,
-    ):
-        assert await async_setup_component(hass, DOMAIN, single_server_config)
-        await hass.async_block_till_done()
-
-    mock_load.assert_called_once()
-    call_args = mock_load.call_args
-    # Should load binary_sensor platform
-    assert call_args[0][1] == Platform.BINARY_SENSOR
-    assert call_args[0][2] == DOMAIN
-
-
-async def test_login_error_exception_handling(
-    hass: HomeAssistant,
-    single_server_config,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Login should catch zm-py LoginError and log a ZM-specific error.
-
-    The integration only catches requests.ConnectionError during login.
-    Other exceptions from zm-py (e.g. LoginError) propagate unhandled,
-    producing a generic HA traceback instead of a ZM-specific message.
-    """
+    """Test config entry raises ConfigEntryNotReady on LoginError."""
     client = create_mock_zm_client()
     client.login.side_effect = LoginError("Invalid credentials")
+    mock_config_entry.add_to_hass(hass)
 
     with patch(
         "custom_components.zoneminder.ZoneMinder",
         return_value=client,
     ):
-        await async_setup_component(hass, DOMAIN, single_server_config)
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    # Desired: the integration catches LoginError and logs a ZM-specific message
-    # (like it does for ConnectionError: "ZoneMinder connection failure")
-    assert "ZoneMinder" in caplog.text
-    assert "LoginError" not in caplog.text  # Should not leak exception class names
+    assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
 
 
-async def test_get_monitors_zoneminder_error_defaults_empty(
-    hass: HomeAssistant,
-    single_server_config,
-    caplog: pytest.LogCaptureFixture,
+async def test_entry_setup_timeout_not_ready(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """ZoneminderError from get_monitors() should default to empty list."""
-    client = create_mock_zm_client()
-    client.get_monitors.side_effect = ZoneminderError("API error")
-
-    with patch(
-        "custom_components.zoneminder.ZoneMinder",
-        return_value=client,
-    ):
-        assert await async_setup_component(hass, DOMAIN, single_server_config)
-        await hass.async_block_till_done()
-
-    assert hass.data[f"{DOMAIN}_monitors"][MOCK_HOST] == []
-    assert "Error fetching monitors" in caplog.text
-
-
-async def test_get_monitors_request_timeout_defaults_empty(
-    hass: HomeAssistant,
-    single_server_config,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """requests.Timeout from get_monitors() should default to empty list."""
-    client = create_mock_zm_client()
-    client.get_monitors.side_effect = Timeout("connection timed out")
-
-    with patch(
-        "custom_components.zoneminder.ZoneMinder",
-        return_value=client,
-    ):
-        assert await async_setup_component(hass, DOMAIN, single_server_config)
-        await hass.async_block_till_done()
-
-    assert hass.data[f"{DOMAIN}_monitors"][MOCK_HOST] == []
-    assert "Error fetching monitors" in caplog.text
-
-
-async def test_login_timeout_logged(
-    hass: HomeAssistant,
-    single_server_config,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """requests.Timeout during login should be caught, logged, and fail setup."""
+    """Test config entry raises ConfigEntryNotReady on timeout."""
     client = create_mock_zm_client()
     client.login.side_effect = Timeout("connection timed out")
+    mock_config_entry.add_to_hass(hass)
 
     with patch(
         "custom_components.zoneminder.ZoneMinder",
         return_value=client,
     ):
-        result = await async_setup_component(hass, DOMAIN, single_server_config)
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    assert "ZoneMinder connection failure" in caplog.text
-    assert "connection timed out" in caplog.text
-    assert result is False
+    assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def test_get_monitors_error_defaults_empty(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test get_monitors error defaults to empty list."""
+    client = create_mock_zm_client()
+    client.get_monitors.side_effect = ZoneminderError("API error")
+    mock_config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.zoneminder.ZoneMinder",
+        return_value=client,
+    ):
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert "Error fetching monitors" in caplog.text
+    entry_data = hass.data[DOMAIN][mock_config_entry.entry_id]
+    assert entry_data.monitors == []
+
+
+async def test_entry_unload(hass: HomeAssistant, mock_config_entry: MockConfigEntry) -> None:
+    """Test entry unload cleans up hass.data."""
+    await setup_entry(hass, mock_config_entry)
+    assert mock_config_entry.entry_id in hass.data[DOMAIN]
+
+    await hass.config_entries.async_unload(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    # Entry data should be cleaned up
+    assert DOMAIN not in hass.data or mock_config_entry.entry_id not in hass.data.get(DOMAIN, {})
+
+
+async def test_multi_entry_setup(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_config_entry_2: MockConfigEntry,
+) -> None:
+    """Test multiple config entries set up correctly."""
+    await setup_entry(hass, mock_config_entry)
+    await setup_entry(hass, mock_config_entry_2)
+
+    assert mock_config_entry.entry_id in hass.data[DOMAIN]
+    assert mock_config_entry_2.entry_id in hass.data[DOMAIN]
+
+    host_map = hass.data[f"{DOMAIN}_host_map"]
+    assert MOCK_HOST in host_map
+    assert MOCK_HOST_2 in host_map
+
+
+async def test_services_registered(hass: HomeAssistant, mock_config_entry: MockConfigEntry) -> None:
+    """Test services are registered during entry setup."""
+    await setup_entry(hass, mock_config_entry)
+    assert hass.services.has_service(DOMAIN, "set_run_state")
+
+
+async def test_yaml_import_fires_flow(hass: HomeAssistant, single_server_config) -> None:
+    """Test YAML config fires import flow."""
+    client = create_mock_zm_client()
+    with (
+        patch(
+            "custom_components.zoneminder.config_flow.ZoneMinder",
+            return_value=client,
+        ),
+        patch(
+            "custom_components.zoneminder.ZoneMinder",
+            return_value=client,
+        ),
+    ):
+        from homeassistant.setup import async_setup_component
+
+        assert await async_setup_component(hass, DOMAIN, single_server_config)
+        await hass.async_block_till_done()
+
+    # An entry should have been created via import
+    entries = hass.config_entries.async_entries(DOMAIN)
+    assert len(entries) == 1
+    assert entries[0].data[CONF_HOST] == MOCK_HOST

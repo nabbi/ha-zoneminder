@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-import voluptuous as vol
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -17,68 +16,48 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 from requests.exceptions import Timeout
 from zoneminder.exceptions import ZoneminderError
 from zoneminder.monitor import Monitor, MonitorState
 
-from custom_components.zoneminder.const import DOMAIN
-from custom_components.zoneminder.switch import PLATFORM_SCHEMA
-
-from .conftest import create_mock_monitor, create_mock_zm_client
+from .conftest import create_mock_monitor, setup_entry
 
 
-async def _setup_zm_with_switches(
-    hass: HomeAssistant,
-    zm_config: dict,
-    monitors: list,
+def _entry_with_switch_options(
+    mock_config_entry: MockConfigEntry,
     command_on: str = "Modect",
     command_off: str = "Monitor",
-) -> MagicMock:
-    """Set up ZM component with switch platform and trigger first poll."""
-    client = create_mock_zm_client(monitors=monitors)
-
-    with patch(
-        "custom_components.zoneminder.ZoneMinder",
-        return_value=client,
-    ):
-        assert await async_setup_component(hass, DOMAIN, zm_config)
-        await hass.async_block_till_done(wait_background_tasks=True)
-        assert await async_setup_component(
-            hass,
-            SWITCH_DOMAIN,
-            {
-                SWITCH_DOMAIN: [
-                    {
-                        "platform": DOMAIN,
-                        "command_on": command_on,
-                        "command_off": command_off,
-                    }
-                ]
-            },
-        )
-        await hass.async_block_till_done(wait_background_tasks=True)
-        # Trigger first poll to update entity state
-        async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
-        await hass.async_block_till_done(wait_background_tasks=True)
-
-    return client
+) -> MockConfigEntry:
+    """Return a copy of the mock entry with custom switch options."""
+    options = dict(mock_config_entry.options)
+    options["command_on"] = command_on
+    options["command_off"] = command_off
+    return MockConfigEntry(
+        domain=mock_config_entry.domain,
+        title=mock_config_entry.title,
+        data=mock_config_entry.data,
+        options=options,
+        unique_id=mock_config_entry.unique_id,
+        source=mock_config_entry.source,
+    )
 
 
-async def test_switch_per_monitor(hass: HomeAssistant, single_server_config, two_monitors) -> None:
+async def test_switch_per_monitor(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, two_monitors
+) -> None:
     """Test one switch entity is created per monitor."""
-    await _setup_zm_with_switches(hass, single_server_config, two_monitors)
+    await setup_entry(hass, mock_config_entry, monitors=two_monitors)
 
     states = hass.states.async_all(SWITCH_DOMAIN)
     assert len(states) == 2
 
 
-async def test_switch_name_format(hass: HomeAssistant, single_server_config) -> None:
+async def test_switch_name_format(hass: HomeAssistant, mock_config_entry: MockConfigEntry) -> None:
     """Test switch name format is '{name} State'."""
     monitors = [create_mock_monitor(name="Front Door")]
-    await _setup_zm_with_switches(hass, single_server_config, monitors)
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
 
     state = hass.states.get("switch.front_door_state")
     assert state is not None
@@ -86,31 +65,41 @@ async def test_switch_name_format(hass: HomeAssistant, single_server_config) -> 
 
 
 async def test_switch_on_when_function_matches_command_on(
-    hass: HomeAssistant, single_server_config
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Test switch is ON when monitor function matches command_on."""
     monitors = [create_mock_monitor(name="Front Door", function=MonitorState.MODECT)]
-    await _setup_zm_with_switches(hass, single_server_config, monitors, command_on="Modect")
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
 
     state = hass.states.get("switch.front_door_state")
     assert state is not None
     assert state.state == STATE_ON
 
 
-async def test_switch_off_when_function_differs(hass: HomeAssistant, single_server_config) -> None:
+async def test_switch_off_when_function_differs(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
     """Test switch is OFF when monitor function differs from command_on."""
     monitors = [create_mock_monitor(name="Front Door", function=MonitorState.MONITOR)]
-    await _setup_zm_with_switches(hass, single_server_config, monitors, command_on="Modect")
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
 
     state = hass.states.get("switch.front_door_state")
     assert state is not None
     assert state.state == STATE_OFF
 
 
-async def test_switch_turn_on_service(hass: HomeAssistant, single_server_config) -> None:
+async def test_switch_turn_on_service(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
     """Test turn_on service sets monitor function to command_on."""
     monitors = [create_mock_monitor(name="Front Door", function=MonitorState.MONITOR)]
-    await _setup_zm_with_switches(hass, single_server_config, monitors)
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
 
     await hass.services.async_call(
         SWITCH_DOMAIN,
@@ -124,10 +113,12 @@ async def test_switch_turn_on_service(hass: HomeAssistant, single_server_config)
     assert monitors[0].function == MonitorState("Modect")
 
 
-async def test_switch_turn_off_service(hass: HomeAssistant, single_server_config) -> None:
+async def test_switch_turn_off_service(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
     """Test turn_off service sets monitor function to command_off."""
     monitors = [create_mock_monitor(name="Front Door", function=MonitorState.MODECT)]
-    await _setup_zm_with_switches(hass, single_server_config, monitors)
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
 
     await hass.services.async_call(
         SWITCH_DOMAIN,
@@ -140,68 +131,32 @@ async def test_switch_turn_off_service(hass: HomeAssistant, single_server_config
     assert monitors[0].function == MonitorState("Monitor")
 
 
-async def test_switch_icon(hass: HomeAssistant, single_server_config) -> None:
+async def test_switch_icon(hass: HomeAssistant, mock_config_entry: MockConfigEntry) -> None:
     """Test switch icon is mdi:record-rec."""
     monitors = [create_mock_monitor(name="Front Door")]
-    await _setup_zm_with_switches(hass, single_server_config, monitors)
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
 
     state = hass.states.get("switch.front_door_state")
     assert state is not None
     assert state.attributes.get("icon") == "mdi:record-rec"
 
 
-async def test_switch_platform_not_ready_empty_monitors(
-    hass: HomeAssistant, single_server_config
-) -> None:
-    """Test PlatformNotReady on empty monitors."""
-    client = create_mock_zm_client(monitors=[])
-
-    with patch(
-        "custom_components.zoneminder.ZoneMinder",
-        return_value=client,
-    ):
-        assert await async_setup_component(hass, DOMAIN, single_server_config)
-        await hass.async_block_till_done()
-        await async_setup_component(
-            hass,
-            SWITCH_DOMAIN,
-            {
-                SWITCH_DOMAIN: [
-                    {
-                        "platform": DOMAIN,
-                        "command_on": "Modect",
-                        "command_off": "Monitor",
-                    }
-                ]
-            },
-        )
-        await hass.async_block_till_done()
+async def test_switch_no_monitors(hass: HomeAssistant, mock_config_entry: MockConfigEntry) -> None:
+    """Test no switches when no monitors."""
+    await setup_entry(hass, mock_config_entry, monitors=[])
 
     states = hass.states.async_all(SWITCH_DOMAIN)
     assert len(states) == 0
 
 
-def test_platform_schema_requires_command_on_off() -> None:
-    """Test platform schema requires command_on and command_off."""
-    # Missing command_on
-    with pytest.raises(vol.MultipleInvalid):
-        PLATFORM_SCHEMA({"platform": "zoneminder", "command_off": "Monitor"})
-
-    # Missing command_off
-    with pytest.raises(vol.MultipleInvalid):
-        PLATFORM_SCHEMA({"platform": "zoneminder", "command_on": "Modect"})
-
-
 async def test_switch_unique_id(
-    hass: HomeAssistant, entity_registry: er.EntityRegistry, single_server_config
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
-    """Switch entities should have unique_id for UI customization.
-
-    No entity in the integration sets unique_id. This means entities cannot
-    be customized via the HA UI and are fragile to name changes.
-    """
+    """Switch entities should have unique_id for UI customization."""
     monitors = [create_mock_monitor(name="Front Door", function=MonitorState.MODECT)]
-    await _setup_zm_with_switches(hass, single_server_config, monitors)
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
 
     entry = entity_registry.async_get("switch.front_door_state")
     assert entry is not None
@@ -209,7 +164,7 @@ async def test_switch_unique_id(
 
 
 async def test_turn_on_api_error_logged(
-    hass: HomeAssistant, single_server_config, caplog: pytest.LogCaptureFixture
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, caplog: pytest.LogCaptureFixture
 ) -> None:
     """ZoneminderError during turn_on should be caught and logged."""
     monitors = [create_mock_monitor(name="Front Door", function=MonitorState.MONITOR)]
@@ -220,7 +175,7 @@ async def test_turn_on_api_error_logged(
     monitors[0].configure_mock(**{"function": MonitorState.MONITOR})
     type(monitors[0]).function = property(lambda self: MonitorState.MONITOR, raise_on_set)
 
-    await _setup_zm_with_switches(hass, single_server_config, monitors)
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
 
     await hass.services.async_call(
         SWITCH_DOMAIN,
@@ -234,7 +189,7 @@ async def test_turn_on_api_error_logged(
 
 
 async def test_turn_off_request_timeout_logged(
-    hass: HomeAssistant, single_server_config, caplog: pytest.LogCaptureFixture
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, caplog: pytest.LogCaptureFixture
 ) -> None:
     """requests.Timeout during turn_off should be caught and logged."""
     monitors = [create_mock_monitor(name="Front Door", function=MonitorState.MODECT)]
@@ -244,7 +199,7 @@ async def test_turn_off_request_timeout_logged(
 
     type(monitors[0]).function = property(lambda self: MonitorState.MODECT, raise_on_set)
 
-    await _setup_zm_with_switches(hass, single_server_config, monitors)
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
 
     await hass.services.async_call(
         SWITCH_DOMAIN,
@@ -257,7 +212,7 @@ async def test_turn_off_request_timeout_logged(
     assert "Error setting monitor" in caplog.text
 
 
-async def test_function_read_no_side_effects(hass: HomeAssistant, single_server_config) -> None:
+async def test_function_read_no_side_effects(hass: HomeAssistant) -> None:
     """Reading monitor.function should not trigger an HTTP request.
 
     BUG-03 resolved: Monitor.function is now a pure read from _raw_result.
