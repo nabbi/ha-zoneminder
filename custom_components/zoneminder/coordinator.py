@@ -73,8 +73,8 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
         try:
             data = ZmData()
 
+            self.zm_client.update_all_monitors(self.zm_monitors)
             for monitor in self.zm_monitors:
-                monitor.update_monitor()
                 monitor_data = ZmMonitorData(
                     function=monitor.function,
                     is_recording=bool(monitor.is_recording),

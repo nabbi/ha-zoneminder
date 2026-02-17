@@ -183,6 +183,7 @@ def create_mock_zm_client(
 
     client.get_active_state.return_value = active_state
     client.set_active_state.return_value = True
+    client.update_all_monitors.return_value = None
 
     return client
 

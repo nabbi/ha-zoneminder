@@ -42,9 +42,9 @@ async def test_update_failed_on_zoneminder_error(hass: HomeAssistant, single_ser
 async def test_update_failed_on_key_error(hass: HomeAssistant, single_server_config) -> None:
     """KeyError from malformed API response should raise UpdateFailed."""
     monitors = [create_mock_monitor()]
-    coordinator, _client = await _setup_and_get_coordinator(hass, single_server_config, monitors)
+    coordinator, client = await _setup_and_get_coordinator(hass, single_server_config, monitors)
 
-    monitors[0].update_monitor.side_effect = KeyError("missing key")
+    client.update_all_monitors.side_effect = KeyError("missing key")
     await coordinator.async_refresh()
 
     assert coordinator.last_update_success is False
@@ -80,20 +80,17 @@ async def test_coordinator_recovers_after_failure(
     assert coordinator.last_update_success is True
 
 
-async def test_update_monitor_called_per_monitor(hass: HomeAssistant, single_server_config) -> None:
-    """Coordinator should call update_monitor() for each monitor during refresh.
+async def test_bulk_update_monitors_called(hass: HomeAssistant, single_server_config) -> None:
+    """Coordinator should call update_all_monitors() with the monitors list.
 
-    BUG-03/BUG-04: Monitor properties are now pure reads from _raw_result.
-    The coordinator is responsible for refreshing monitor data explicitly.
+    Replaces M individual update_monitor() calls with 1 bulk API call.
     """
     monitors = [create_mock_monitor(monitor_id=1), create_mock_monitor(monitor_id=2, name="Yard")]
-    coordinator, _client = await _setup_and_get_coordinator(hass, single_server_config, monitors)
+    coordinator, client = await _setup_and_get_coordinator(hass, single_server_config, monitors)
 
     # Reset call counts from initial setup refresh
-    for mon in monitors:
-        mon.update_monitor.reset_mock()
+    client.update_all_monitors.reset_mock()
 
     await coordinator.async_refresh()
 
-    for mon in monitors:
-        mon.update_monitor.assert_called_once()
+    client.update_all_monitors.assert_called_once_with(monitors)
