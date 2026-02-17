@@ -12,6 +12,18 @@
           "path_zms": "ZMS path",
           "verify_ssl": "[%key:common::config_flow::data::verify_ssl%]"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure ZoneMinder",
+        "data": {
+          "host": "[%key:common::config_flow::data::host%]",
+          "username": "[%key:common::config_flow::data::username%]",
+          "password": "[%key:common::config_flow::data::password%]",
+          "ssl": "Use SSL",
+          "path": "Path",
+          "path_zms": "ZMS path",
+          "verify_ssl": "[%key:common::config_flow::data::verify_ssl%]"
+        }
       }
     },
     "error": {
@@ -21,7 +33,8 @@
     },
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
     }
   },
   "options": {
