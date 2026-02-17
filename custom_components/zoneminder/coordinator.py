@@ -60,7 +60,8 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
 
     async def _async_update_data(self) -> ZmData:
         """Fetch data from ZoneMinder in one batched executor call."""
-        return await self.hass.async_add_executor_job(self._fetch_all_data)
+        data: ZmData = await self.hass.async_add_executor_job(self._fetch_all_data)
+        return data
 
     def _fetch_all_data(self) -> ZmData:
         """Fetch all data synchronously (runs in executor thread)."""
@@ -71,7 +72,7 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
                 monitor.update_monitor()
                 monitor_data = ZmMonitorData(
                     function=monitor.function,
-                    is_recording=monitor.is_recording,
+                    is_recording=bool(monitor.is_recording),
                     is_available=monitor.is_available,
                 )
                 for time_period in TimePeriod:

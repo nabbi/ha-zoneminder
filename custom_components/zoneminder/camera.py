@@ -70,7 +70,7 @@ class ZoneMinderCamera(CoordinatorEntity[ZmDataUpdateCoordinator], MjpegCamera):
     def is_recording(self) -> bool:
         """Return True if the camera is recording."""
         if (data := self.coordinator.data) and (md := data.monitors.get(self._monitor.id)):
-            return md.is_recording
+            return bool(md.is_recording)
         return False
 
     @property
@@ -79,5 +79,5 @@ class ZoneMinderCamera(CoordinatorEntity[ZmDataUpdateCoordinator], MjpegCamera):
         if not self.coordinator.last_update_success:
             return False
         if (data := self.coordinator.data) and (md := data.monitors.get(self._monitor.id)):
-            return md.is_available
+            return bool(md.is_available)
         return False

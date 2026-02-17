@@ -69,8 +69,8 @@ class ZMSwitchMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntity)
         self,
         coordinator: ZmDataUpdateCoordinator,
         monitor: Monitor,
-        on_state: str,
-        off_state: str,
+        on_state: MonitorState,
+        off_state: MonitorState,
         host_name: str,
     ) -> None:
         """Initialize the switch."""
@@ -91,7 +91,7 @@ class ZMSwitchMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntity)
     def is_on(self) -> bool | None:
         """Return True if entity is on."""
         if (data := self.coordinator.data) and (md := data.monitors.get(self._monitor.id)):
-            return md.function == self._on_state
+            return bool(md.function == self._on_state)
         return None
 
     async def async_turn_on(self, **kwargs: Any) -> None:

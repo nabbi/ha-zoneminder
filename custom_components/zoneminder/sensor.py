@@ -124,7 +124,7 @@ class ZMSensorMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity)
         if not self.coordinator.last_update_success:
             return False
         if (data := self.coordinator.data) and (md := data.monitors.get(self._monitor.id)):
-            return md.is_available
+            return bool(md.is_available)
         return False
 
     @property
@@ -168,7 +168,8 @@ class ZMSensorEvents(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity):
     def native_value(self) -> int | None:
         """Return the event count."""
         if (data := self.coordinator.data) and (md := data.monitors.get(self._monitor.id)):
-            return md.events.get((self.time_period, self._include_archived))
+            count: int | None = md.events.get((self.time_period, self._include_archived))
+            return count
         return None
 
 
@@ -193,12 +194,13 @@ class ZMSensorRunState(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity)
         if not self.coordinator.last_update_success:
             return False
         if data := self.coordinator.data:
-            return data.server_available
+            return bool(data.server_available)
         return False
 
     @property
     def native_value(self) -> str | None:
         """Return the run state."""
         if data := self.coordinator.data:
-            return data.run_state
+            state: str | None = data.run_state
+            return state
         return None
