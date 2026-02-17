@@ -185,6 +185,22 @@ def create_mock_zm_client(
     client.set_active_state.return_value = True
     client.update_all_monitors.return_value = None
 
+    # Build get_event_counts mock from monitors' event data.
+    # The coordinator pre-fetches event counts per time period; the mock
+    # delegates to each monitor's get_events() to build the result dict.
+    _monitors = monitors or []
+
+    def _mock_get_event_counts(time_period, include_archived=False):
+        result = {}
+        for mon in _monitors:
+            val = mon.get_events(time_period, include_archived)
+            if val is None:
+                return None
+            result[str(mon.id)] = val
+        return result
+
+    client.get_event_counts = MagicMock(side_effect=_mock_get_event_counts)
+
     return client
 
 

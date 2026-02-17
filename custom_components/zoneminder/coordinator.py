@@ -74,6 +74,14 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
             data = ZmData()
 
             self.zm_client.update_all_monitors(self.zm_monitors)
+
+            # Pre-fetch event counts (1 API call per time period, not per monitor)
+            event_counts: dict[tuple[TimePeriod, bool], dict | None] = {}
+            for time_period, include_archived in self._event_queries:
+                event_counts[(time_period, include_archived)] = self.zm_client.get_event_counts(
+                    time_period, include_archived
+                )
+
             for monitor in self.zm_monitors:
                 monitor_data = ZmMonitorData(
                     function=monitor.function,
@@ -81,9 +89,13 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
                     is_available=monitor.is_available,
                 )
                 for time_period, include_archived in self._event_queries:
-                    monitor_data.events[(time_period, include_archived)] = monitor.get_events(
-                        time_period, include_archived
-                    )
+                    counts = event_counts.get((time_period, include_archived))
+                    if counts is not None:
+                        monitor_data.events[(time_period, include_archived)] = counts.get(
+                            str(monitor.id), 0
+                        )
+                    else:
+                        monitor_data.events[(time_period, include_archived)] = None
                 data.monitors[monitor.id] = monitor_data
 
             data.run_state = self.zm_client.get_active_state()

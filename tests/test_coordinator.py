@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 from requests.exceptions import Timeout
 from zoneminder.exceptions import ZoneminderError
+from zoneminder.monitor import TimePeriod
 
 from custom_components.zoneminder.const import DOMAIN
 
@@ -94,3 +95,38 @@ async def test_bulk_update_monitors_called(hass: HomeAssistant, single_server_co
     await coordinator.async_refresh()
 
     client.update_all_monitors.assert_called_once_with(monitors)
+
+
+async def test_event_counts_prefetched_once_per_period(
+    hass: HomeAssistant, single_server_config
+) -> None:
+    """Event counts should be fetched once per time period, not per monitor.
+
+    The coordinator pre-fetches all event counts before the per-monitor loop
+    so that the zm-py 1-second TTL cache cannot expire mid-refresh.
+    """
+    monitors = [
+        create_mock_monitor(monitor_id=1),
+        create_mock_monitor(monitor_id=2, name="Yard"),
+        create_mock_monitor(monitor_id=3, name="Garage"),
+    ]
+    coordinator, client = await _setup_and_get_coordinator(hass, single_server_config, monitors)
+
+    # Register event queries (normally done by sensor platform setup)
+    coordinator.register_event_queries(
+        {
+            (TimePeriod.ALL, False),
+            (TimePeriod.HOUR, False),
+        }
+    )
+
+    client.get_event_counts.reset_mock()
+    await coordinator.async_refresh()
+
+    # Should be called exactly once per (TimePeriod, include_archived) pair,
+    # NOT once per monitor * period
+    assert client.get_event_counts.call_count == 2
+    client.get_event_counts.assert_has_calls(
+        [call(TimePeriod.ALL, False), call(TimePeriod.HOUR, False)],
+        any_order=True,
+    )

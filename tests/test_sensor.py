@@ -331,7 +331,7 @@ async def test_default_conditions_only_all(hass: HomeAssistant, single_server_co
 
 
 async def test_include_archived_flag(hass: HomeAssistant, single_server_config) -> None:
-    """Test include_archived flag is passed correctly to get_events."""
+    """Test include_archived flag is passed correctly to get_event_counts."""
     monitors = [create_mock_monitor(name="Cam")]
     sensor_config = {
         "sensor": [
@@ -342,11 +342,12 @@ async def test_include_archived_flag(hass: HomeAssistant, single_server_config) 
             }
         ]
     }
-    await _setup_zm_with_sensors(hass, single_server_config, monitors, sensor_config=sensor_config)
+    client = await _setup_zm_with_sensors(
+        hass, single_server_config, monitors, sensor_config=sensor_config
+    )
 
-    # Verify get_events was called with include_archived=True
-    # The coordinator fetches all time periods; check that the archived variant was included
-    monitors[0].get_events.assert_any_call(TimePeriod.ALL, True)
+    # Verify get_event_counts was called with include_archived=True
+    client.get_event_counts.assert_any_call(TimePeriod.ALL, True)
 
 
 async def test_sensor_count_calculation(hass: HomeAssistant) -> None:
