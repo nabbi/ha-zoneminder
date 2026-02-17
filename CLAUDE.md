@@ -58,6 +58,7 @@ tox -e typing
 - `__init__.py` — YAML config schema, `async_setup()` entry point, ZM client creation
 - `coordinator.py` — `ZmDataUpdateCoordinator` shared by all entities per server
 - `camera.py` — MJPEG camera entities (one per ZM monitor)
+- `select.py` — Run state select entity (dropdown of valid ZM run states)
 - `sensor.py` — Monitor status, event count, and run state sensors
 - `switch.py` — Monitor function toggle (on/off state)
 - `binary_sensor.py` — Server availability sensor
@@ -111,6 +112,7 @@ ha-zoneminder–specific status.
 | BUG-07 | `LoginError` not caught during setup | `f29dbb9` |
 | BUG-10 | No `DeviceInfo` — entities not grouped | `eee8c6b` |
 | BUG-12 | zm-py exceptions unhandled across integration | `0fda937` |
+| BUG-13 | `get_run_states()` unused; no select entity for run state control | *(this commit)* |
 | — | `set_run_state` service missing `id` field in services.yaml/strings.json | *(this commit)* |
 
 ### Deferred — Feature Requests

@@ -36,6 +36,7 @@ class ZmData:
 
     monitors: dict[int, ZmMonitorData] = field(default_factory=dict)
     run_state: str | None = None
+    available_run_states: list[str] = field(default_factory=list)
     server_available: bool = False
 
 
@@ -101,7 +102,9 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
                         monitor_data.events[(time_period, include_archived)] = None
                 data.monitors[monitor.id] = monitor_data
 
-            data.run_state = self.zm_client.get_active_state()
+            run_state_objs = self.zm_client.get_run_states()
+            data.available_run_states = sorted(rs.name for rs in run_state_objs)
+            data.run_state = next((rs.name for rs in run_state_objs if rs.active), None)
             data.server_available = self.zm_client.is_available
 
             return data

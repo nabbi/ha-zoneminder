@@ -7,6 +7,7 @@ DOMAIN = "zoneminder"
 PLATFORMS = [
     Platform.BINARY_SENSOR,
     Platform.CAMERA,
+    Platform.SELECT,
     Platform.SENSOR,
     Platform.SWITCH,
 ]

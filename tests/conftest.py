@@ -235,6 +235,7 @@ def create_mock_zm_client(
     monitors: list | None = None,
     login_success: bool = True,
     active_state: str | None = "Running",
+    run_state_names: list[str] | None = None,
     zm_version: str | None = "1.38.0",
 ) -> MagicMock:
     """Create a mock ZoneMinder client."""
@@ -247,7 +248,16 @@ def create_mock_zm_client(
     type(client).verify_ssl = PropertyMock(return_value=verify_ssl)
     type(client).zm_version = PropertyMock(return_value=zm_version)
 
-    client.get_active_state.return_value = active_state
+    # Build get_run_states mock
+    _run_state_names = run_state_names or ["Away", "Home", "Running"]
+    mock_run_states = []
+    for name in _run_state_names:
+        rs = MagicMock()
+        rs.name = name
+        rs.active = name == active_state
+        mock_run_states.append(rs)
+    client.get_run_states.return_value = mock_run_states
+
     client.set_active_state.return_value = True
     client.update_all_monitors.return_value = None
 
@@ -282,6 +292,7 @@ async def setup_entry(
     monitors: list | None = None,
     is_available: bool = True,
     active_state: str | None = "Running",
+    run_state_names: list[str] | None = None,
     zm_version: str | None = "1.38.0",
     verify_ssl: bool = True,
 ) -> MagicMock:
@@ -290,6 +301,7 @@ async def setup_entry(
         monitors=monitors or [],
         is_available=is_available,
         active_state=active_state,
+        run_state_names=run_state_names,
         zm_version=zm_version,
         verify_ssl=verify_ssl,
     )

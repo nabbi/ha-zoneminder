@@ -29,7 +29,7 @@ async def test_update_failed_on_zoneminder_error(
     monitors = [create_mock_monitor()]
     coordinator, client = await _setup_and_get_coordinator(hass, mock_config_entry, monitors)
 
-    client.get_active_state.side_effect = ZoneminderError("API down")
+    client.get_run_states.side_effect = ZoneminderError("API down")
     await coordinator.async_refresh()
 
     assert coordinator.last_update_success is False
@@ -55,7 +55,7 @@ async def test_update_failed_on_request_timeout(
     monitors = [create_mock_monitor()]
     coordinator, client = await _setup_and_get_coordinator(hass, mock_config_entry, monitors)
 
-    client.get_active_state.side_effect = Timeout("connection timed out")
+    client.get_run_states.side_effect = Timeout("connection timed out")
     await coordinator.async_refresh()
 
     assert coordinator.last_update_success is False
@@ -69,13 +69,12 @@ async def test_coordinator_recovers_after_failure(
     coordinator, client = await _setup_and_get_coordinator(hass, mock_config_entry, monitors)
 
     # First poll fails
-    client.get_active_state.side_effect = ZoneminderError("temporary failure")
+    client.get_run_states.side_effect = ZoneminderError("temporary failure")
     await coordinator.async_refresh()
     assert coordinator.last_update_success is False
 
     # Next poll succeeds
-    client.get_active_state.side_effect = None
-    client.get_active_state.return_value = "Running"
+    client.get_run_states.side_effect = None
     await coordinator.async_refresh()
     assert coordinator.last_update_success is True
 
