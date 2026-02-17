@@ -159,7 +159,7 @@ class ZMSwitchForceAlarm(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntit
     def is_on(self) -> bool | None:
         """Return True if the monitor is currently in alarm/recording state."""
         if (data := self.coordinator.data) and (md := data.monitors.get(self._monitor.id)):
-            return md.is_recording
+            return bool(md.is_recording)
         return None
 
     async def async_turn_on(self, **kwargs: Any) -> None:
