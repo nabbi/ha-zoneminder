@@ -237,6 +237,20 @@ async def test_run_state_sensor_value(hass: HomeAssistant, single_server_config)
     assert state.state == "Home"
 
 
+async def test_run_state_device_info_includes_zm_version(
+    hass: HomeAssistant, single_server_config
+) -> None:
+    """Test run state sensor device info includes ZoneMinder version as sw_version."""
+    monitors = [create_mock_monitor(name="Cam")]
+    await _setup_zm_with_sensors(hass, single_server_config, monitors)
+
+    entity = hass.data["entity_components"]["sensor"].get_entity("sensor.run_state")
+    assert entity is not None
+    info = entity.device_info
+    assert info is not None
+    assert info["sw_version"] == "1.38.0"
+
+
 async def test_run_state_sensor_unavailable(hass: HomeAssistant, single_server_config) -> None:
     """Test run state sensor when server unavailable."""
     monitors = [create_mock_monitor(name="Cam")]

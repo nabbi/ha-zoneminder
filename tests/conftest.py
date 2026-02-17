@@ -169,15 +169,17 @@ def create_mock_zm_client(
     monitors: list | None = None,
     login_success: bool = True,
     active_state: str | None = "Running",
+    zm_version: str | None = "1.38.0",
 ) -> MagicMock:
     """Create a mock ZoneMinder client."""
     client = MagicMock()
     client.login.return_value = login_success
     client.get_monitors.return_value = monitors or []
 
-    # is_available and verify_ssl are properties in zm-py
+    # is_available, verify_ssl, and zm_version are properties in zm-py
     type(client).is_available = PropertyMock(return_value=is_available)
     type(client).verify_ssl = PropertyMock(return_value=verify_ssl)
+    type(client).zm_version = PropertyMock(return_value=zm_version)
 
     client.get_active_state.return_value = active_state
     client.set_active_state.return_value = True

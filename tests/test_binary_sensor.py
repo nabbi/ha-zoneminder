@@ -130,6 +130,30 @@ async def test_binary_sensor_state_updates_on_poll(
     assert state.state == STATE_OFF
 
 
+async def test_device_info_includes_zm_version(hass: HomeAssistant, single_server_config) -> None:
+    """Test server device info includes ZoneMinder version as sw_version."""
+    client = create_mock_zm_client(is_available=True, zm_version="1.36.33")
+    await _setup_and_update(hass, single_server_config, client)
+
+    entity = hass.data["entity_components"]["binary_sensor"].get_entity(ENTITY_ID)
+    assert entity is not None
+    info = entity.device_info
+    assert info is not None
+    assert info["sw_version"] == "1.36.33"
+
+
+async def test_device_info_zm_version_none(hass: HomeAssistant, single_server_config) -> None:
+    """Test server device info handles None zm_version (legacy auth without version)."""
+    client = create_mock_zm_client(is_available=True, zm_version=None)
+    await _setup_and_update(hass, single_server_config, client)
+
+    entity = hass.data["entity_components"]["binary_sensor"].get_entity(ENTITY_ID)
+    assert entity is not None
+    info = entity.device_info
+    assert info is not None
+    assert info["sw_version"] is None
+
+
 async def test_unique_id_set(
     hass: HomeAssistant, entity_registry: er.EntityRegistry, single_server_config
 ) -> None:

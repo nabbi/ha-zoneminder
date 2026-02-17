@@ -45,6 +45,7 @@ class ZMAvailabilitySensor(CoordinatorEntity[ZmDataUpdateCoordinator], BinarySen
             identifiers={(DOMAIN, host_name)},
             name=host_name,
             manufacturer="ZoneMinder",
+            sw_version=coordinator.zm_client.zm_version,
         )
 
     @property
