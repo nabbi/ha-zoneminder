@@ -36,7 +36,7 @@ immediately without reinstalling.
 To switch back to the PyPI version:
 
 ```bash
-pip install 'zm-py==0.5.5.dev5'
+pip install 'zm-py==0.5.5.dev13'
 ```
 
 ## Running Tests
@@ -83,3 +83,12 @@ ruff format custom_components tests
 ```bash
 tox -e typing
 ```
+
+## Architecture Diagrams
+
+Draw.io source files in `docs/` — open with [draw.io](https://app.diagrams.net/) or the
+VS Code extension:
+
+- [Component Architecture](docs/architecture.drawio) — stack overview: HA Core, ha-zoneminder, zm-py, ZoneMinder Server
+- [Coordinator Data Flow](docs/data-flow.drawio) — read/write paths through ZmDataUpdateCoordinator
+- [Config Flow](docs/config-flow.drawio) — user setup, YAML import, reconfigure, and options flow

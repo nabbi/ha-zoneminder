@@ -53,14 +53,17 @@ tox -e typing
 ### Directory Layout
 - `custom_components/zoneminder/` — the integration source (installed into HA's config dir)
 - `tests/` — pytest test suite using `pytest-homeassistant-custom-component`
+- `docs/` — architecture diagrams (`.drawio`) and usage guide
 
 ### Key Files
 - `__init__.py` — YAML config schema, `async_setup()` entry point, ZM client creation
+- `config_flow.py` — Config flow (user/import/reconfigure steps) and options flow
 - `coordinator.py` — `ZmDataUpdateCoordinator` shared by all entities per server
+- `models.py` — `ZmEntryData` dataclass for per-entry runtime data
 - `camera.py` — MJPEG camera entities (one per ZM monitor)
-- `select.py` — Run state select entity (dropdown of valid ZM run states)
+- `select.py` — Run state select + Capturing/Analysing/Recording selects (ZM 1.37+)
 - `sensor.py` — Monitor status, event count, and run state sensors
-- `switch.py` — Monitor function toggle (on/off state)
+- `switch.py` — Force alarm switch + legacy function toggle (ZM < 1.37)
 - `binary_sensor.py` — Server availability sensor
 - `services.py` — `set_run_state` service
 - `manifest.json` — Integration metadata (version, requirements, codeowners)
@@ -70,7 +73,7 @@ tox -e typing
 - The `auto_enable_custom_integrations` autouse fixture in `conftest.py` ensures HA's loader picks up `custom_components/zoneminder/` instead of the built-in integration
 - All patch targets use `custom_components.zoneminder.*` (not `homeassistant.components.zoneminder.*`)
 - `from pytest_homeassistant_custom_component.common import async_fire_time_changed` replaces the core `tests.common` import
-- 100 passing tests, 1 xfailed (BUG-08: PTZ control not exposed)
+- 162 passing tests, 1 xfailed (BUG-08: PTZ control not exposed)
 
 ## Code Style
 
@@ -91,7 +94,7 @@ Do not ask the user to commit until all four pass. Fix any failures first.
 
 ## Dependencies
 
-- Runtime: `zm-py==0.5.5.dev7`, `homeassistant`
+- Runtime: `zm-py==0.5.5.dev13`, `homeassistant`
 - Test: `pytest-homeassistant-custom-component` (pulls in HA core + test fixtures)
 
 ## Bug & Feature Tracking
@@ -103,22 +106,22 @@ ha-zoneminder–specific status.
 
 | ID | Description | Commit |
 |----|-------------|--------|
-| BUG-01 | `RequestException` during login didn't set `success = False` | *(this commit)* |
+| BUG-01 | `RequestException` during login didn't set `success = False` | `63c44e2` |
 | BUG-02 | No DataUpdateCoordinator — excessive API calls | `8285e06` |
 | BUG-03 | `Monitor.function` getter calls `update_monitor()` — hidden I/O | `dc3a06d` |
 | BUG-04 | `Monitor.is_available` calls `update_monitor()` — redundant I/O | `dc3a06d` |
 | BUG-05 | No `unique_id` on any entity | `cb74a1a` |
 | BUG-06 | `get_monitors()` called 3x — separate object trees | `242ad7e` |
 | BUG-07 | `LoginError` not caught during setup | `f29dbb9` |
+| BUG-09 | No config flow (YAML-only) | `fdd38c5` |
 | BUG-10 | No `DeviceInfo` — entities not grouped | `eee8c6b` |
 | BUG-12 | zm-py exceptions unhandled across integration | `0fda937` |
-| BUG-13 | `get_run_states()` unused; no select entity for run state control | *(this commit)* |
-| — | `set_run_state` service missing `id` field in services.yaml/strings.json | *(this commit)* |
+| BUG-13 | `get_run_states()` unused; no select entity for run state control | `eb8e1a1` |
+| — | `set_run_state` service missing `id` field in services.yaml/strings.json | `63c44e2` |
 
 ### Deferred — Feature Requests
 
 | ID | Description | Reason |
 |----|-------------|--------|
 | BUG-08 | PTZ control not exposed | No PTZ test hardware available to validate. zm-py support is complete; HA layer needs ONVIF-style entity service + real hardware testing. |
-| BUG-09 | No config flow (YAML-only) | Future enhancement. Requires migration path from YAML to config entries. |
 | BUG-16 | `Monitor.controllable` unused | Blocked by BUG-08 — will be consumed when PTZ is implemented. |
