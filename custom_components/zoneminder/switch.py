@@ -53,22 +53,26 @@ async def async_setup_entry(
     """Set up the ZoneMinder switch platform."""
     entry_data: ZmEntryData = hass.data[DOMAIN][entry.entry_id]
 
-    # On ZM 1.37+, the three select entities (Capturing/Analysing/Recording)
-    # replace the legacy Function switch.
-    if _is_zm_137_or_later(entry_data.coordinator.zm_client.zm_version):
-        return
+    entities: list[SwitchEntity] = []
 
-    on_state = MonitorState(entry.options.get(CONF_COMMAND_ON, DEFAULT_COMMAND_ON))
-    off_state = MonitorState(entry.options.get(CONF_COMMAND_OFF, DEFAULT_COMMAND_OFF))
-
-    switches: list[ZMSwitchMonitors] = []
+    # Force alarm switches are available on ALL ZM versions.
     for monitor in entry_data.monitors:
-        switches.append(
-            ZMSwitchMonitors(
-                entry_data.coordinator, monitor, on_state, off_state, entry_data.host_name
+        entities.append(ZMSwitchForceAlarm(entry_data.coordinator, monitor, entry_data.host_name))
+
+    # On ZM 1.37+, the three select entities (Capturing/Analysing/Recording)
+    # replace the legacy Function switch — so skip function switches.
+    if not _is_zm_137_or_later(entry_data.coordinator.zm_client.zm_version):
+        on_state = MonitorState(entry.options.get(CONF_COMMAND_ON, DEFAULT_COMMAND_ON))
+        off_state = MonitorState(entry.options.get(CONF_COMMAND_OFF, DEFAULT_COMMAND_OFF))
+
+        for monitor in entry_data.monitors:
+            entities.append(
+                ZMSwitchMonitors(
+                    entry_data.coordinator, monitor, on_state, off_state, entry_data.host_name
+                )
             )
-        )
-    async_add_entities(switches)
+
+    async_add_entities(entities)
 
 
 class ZMSwitchMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntity):
@@ -124,5 +128,58 @@ class ZMSwitchMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntity)
                 "Error setting monitor %s function to %s: %s",
                 self._monitor.name,
                 state,
+                err,
+            )
+
+
+class ZMSwitchForceAlarm(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntity):
+    """Switch to force a ZoneMinder monitor into alarm state."""
+
+    _attr_icon = "mdi:alarm-light"
+
+    def __init__(
+        self,
+        coordinator: ZmDataUpdateCoordinator,
+        monitor: Monitor,
+        host_name: str,
+    ) -> None:
+        """Initialize the force alarm switch."""
+        super().__init__(coordinator)
+        self._monitor = monitor
+        self._attr_name = f"{monitor.name} Force Alarm"
+        self._attr_unique_id = f"{host_name}_{monitor.id}_force_alarm"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
+            name=monitor.name,
+            manufacturer="ZoneMinder",
+            via_device=(DOMAIN, host_name),
+        )
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True if the monitor is currently in alarm/recording state."""
+        if (data := self.coordinator.data) and (md := data.monitors.get(self._monitor.id)):
+            return md.is_recording
+        return None
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Force the monitor into alarm state."""
+        await self.hass.async_add_executor_job(self._set_force_alarm, True)
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Cancel forced alarm on the monitor."""
+        await self.hass.async_add_executor_job(self._set_force_alarm, False)
+        await self.coordinator.async_request_refresh()
+
+    def _set_force_alarm(self, state: bool) -> None:
+        """Set force alarm state (runs in executor)."""
+        try:
+            self._monitor.set_force_alarm_state(state)
+        except (ZoneminderError, RequestException) as err:
+            _LOGGER.error(
+                "Error setting force alarm %s for monitor %s: %s",
+                "on" if state else "off",
+                self._monitor.name,
                 err,
             )
