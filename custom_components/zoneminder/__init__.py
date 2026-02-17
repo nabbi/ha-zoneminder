@@ -24,6 +24,8 @@ from zoneminder.zm import ZoneMinder
 
 from .const import (
     CONF_PATH_ZMS,
+    CONF_STREAM_MAXFPS,
+    CONF_STREAM_SCALE,
     DEFAULT_PATH,
     DEFAULT_PATH_ZMS,
     DEFAULT_SSL,
@@ -78,6 +80,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     protocol = "https" if conf.get(CONF_SSL, DEFAULT_SSL) else "http"
     server_origin = f"{protocol}://{host_name}"
 
+    options = entry.options
+    stream_scale_val = options.get(CONF_STREAM_SCALE)
+    stream_scale = int(stream_scale_val) if stream_scale_val is not None else None
+    stream_maxfps_val = options.get(CONF_STREAM_MAXFPS)
+    stream_maxfps = float(stream_maxfps_val) if stream_maxfps_val is not None else None
+
     zm_client = ZoneMinder(
         server_origin,
         conf.get(CONF_USERNAME),
@@ -85,6 +93,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         conf.get(CONF_PATH, DEFAULT_PATH),
         conf.get(CONF_PATH_ZMS, DEFAULT_PATH_ZMS),
         conf.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+        stream_scale=stream_scale,
+        stream_maxfps=stream_maxfps,
     )
 
     try:

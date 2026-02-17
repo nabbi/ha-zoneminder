@@ -45,7 +45,9 @@
           "include_archived": "Include archived events",
           "monitored_conditions": "Monitored conditions",
           "command_on": "Monitor function for ON state",
-          "command_off": "Monitor function for OFF state"
+          "command_off": "Monitor function for OFF state",
+          "stream_scale": "Stream scale (%, 1–100)",
+          "stream_maxfps": "Stream max FPS (MJPEG only)"
         }
       }
     }

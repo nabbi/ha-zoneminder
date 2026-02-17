@@ -22,6 +22,9 @@ from homeassistant.const import (
 )
 from homeassistant.helpers.selector import (
     BooleanSelector,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
@@ -38,6 +41,8 @@ from zoneminder.zm import ZoneMinder
 from .const import (
     CONF_INCLUDE_ARCHIVED,
     CONF_PATH_ZMS,
+    CONF_STREAM_MAXFPS,
+    CONF_STREAM_SCALE,
     DEFAULT_COMMAND_OFF,
     DEFAULT_COMMAND_ON,
     DEFAULT_INCLUDE_ARCHIVED,
@@ -229,6 +234,22 @@ class ZoneMinderOptionsFlow(OptionsFlowWithConfigEntry):
                     multiple=True,
                     mode=SelectSelectorMode.DROPDOWN,
                 )
+            ),
+            vol.Optional(
+                CONF_STREAM_SCALE,
+                description={
+                    "suggested_value": options.get(CONF_STREAM_SCALE),
+                },
+            ): NumberSelector(
+                NumberSelectorConfig(min=1, max=100, step=1, mode=NumberSelectorMode.BOX)
+            ),
+            vol.Optional(
+                CONF_STREAM_MAXFPS,
+                description={
+                    "suggested_value": options.get(CONF_STREAM_MAXFPS),
+                },
+            ): NumberSelector(
+                NumberSelectorConfig(min=0.5, max=30.0, step=0.5, mode=NumberSelectorMode.BOX)
             ),
         }
 

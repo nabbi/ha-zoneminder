@@ -13,7 +13,7 @@ from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import Timeout
 from zoneminder.exceptions import LoginError, ZoneminderError
 
-from custom_components.zoneminder.const import DOMAIN
+from custom_components.zoneminder.const import CONF_STREAM_MAXFPS, CONF_STREAM_SCALE, DOMAIN
 
 from .conftest import MOCK_HOST, MOCK_HOST_2, create_mock_zm_client, setup_entry
 
@@ -200,3 +200,66 @@ async def test_yaml_import_fires_flow(hass: HomeAssistant, single_server_config)
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
     assert entries[0].data[CONF_HOST] == MOCK_HOST
+
+
+async def test_entry_setup_passes_stream_options(
+    hass: HomeAssistant,
+) -> None:
+    """Test that stream_scale and stream_maxfps options are passed to ZoneMinder()."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=MOCK_HOST,
+        data={
+            CONF_HOST: MOCK_HOST,
+            "username": "admin",
+            "password": "secret",
+            "ssl": False,
+            "path": "/zm/",
+            "path_zms": "/zm/cgi-bin/nph-zms",
+            "verify_ssl": True,
+        },
+        options={
+            "include_archived": False,
+            "monitored_conditions": ["all"],
+            "command_on": "Modect",
+            "command_off": "Monitor",
+            CONF_STREAM_SCALE: 50,
+            CONF_STREAM_MAXFPS: 5.0,
+        },
+        unique_id=MOCK_HOST,
+    )
+    entry.add_to_hass(hass)
+
+    client = create_mock_zm_client()
+    with patch(
+        "custom_components.zoneminder.ZoneMinder",
+        return_value=client,
+    ) as mock_zm_cls:
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    mock_zm_cls.assert_called_once()
+    call_kwargs = mock_zm_cls.call_args
+    assert call_kwargs.kwargs["stream_scale"] == 50
+    assert call_kwargs.kwargs["stream_maxfps"] == 5.0
+
+
+async def test_entry_setup_stream_options_none_when_unset(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test that stream_scale/maxfps are None when not in options."""
+    mock_config_entry.add_to_hass(hass)
+
+    client = create_mock_zm_client()
+    with patch(
+        "custom_components.zoneminder.ZoneMinder",
+        return_value=client,
+    ) as mock_zm_cls:
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    mock_zm_cls.assert_called_once()
+    call_kwargs = mock_zm_cls.call_args
+    assert call_kwargs.kwargs["stream_scale"] is None
+    assert call_kwargs.kwargs["stream_maxfps"] is None

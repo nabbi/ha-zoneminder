@@ -14,6 +14,8 @@ PLATFORMS = [
 
 CONF_PATH_ZMS = "path_zms"
 CONF_INCLUDE_ARCHIVED = "include_archived"
+CONF_STREAM_SCALE = "stream_scale"
+CONF_STREAM_MAXFPS = "stream_maxfps"
 
 DEFAULT_PATH = "/zm/"
 DEFAULT_PATH_ZMS = "/zm/cgi-bin/nph-zms"

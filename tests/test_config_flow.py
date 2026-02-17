@@ -23,6 +23,8 @@ from zoneminder.exceptions import LoginError
 from custom_components.zoneminder.const import (
     CONF_INCLUDE_ARCHIVED,
     CONF_PATH_ZMS,
+    CONF_STREAM_MAXFPS,
+    CONF_STREAM_SCALE,
     DEFAULT_COMMAND_OFF,
     DEFAULT_COMMAND_ON,
     DEFAULT_INCLUDE_ARCHIVED,
@@ -422,3 +424,69 @@ async def test_options_flow_shows_command_on_pre137(hass: HomeAssistant, mock_co
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"]["command_on"] == "Record"
     assert result["data"]["command_off"] == "None"
+
+
+async def test_options_flow_stream_scale_maxfps(hass: HomeAssistant, mock_config_entry) -> None:
+    """Test options flow accepts stream_scale and stream_maxfps."""
+    mock_config_entry.add_to_hass(hass)
+
+    client = create_mock_zm_client()
+    with patch(
+        "custom_components.zoneminder.ZoneMinder",
+        return_value=client,
+    ):
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+
+    with patch(
+        "custom_components.zoneminder.ZoneMinder",
+        return_value=client,
+    ):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_INCLUDE_ARCHIVED: False,
+                CONF_MONITORED_CONDITIONS: ["all"],
+                CONF_STREAM_SCALE: 50,
+                CONF_STREAM_MAXFPS: 5.0,
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_STREAM_SCALE] == 50
+    assert result["data"][CONF_STREAM_MAXFPS] == 5.0
+
+
+async def test_options_flow_stream_params_unset(hass: HomeAssistant, mock_config_entry) -> None:
+    """Test options flow works when stream params are not provided (server default)."""
+    mock_config_entry.add_to_hass(hass)
+
+    client = create_mock_zm_client()
+    with patch(
+        "custom_components.zoneminder.ZoneMinder",
+        return_value=client,
+    ):
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+
+    with patch(
+        "custom_components.zoneminder.ZoneMinder",
+        return_value=client,
+    ):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_INCLUDE_ARCHIVED: False,
+                CONF_MONITORED_CONDITIONS: ["all"],
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert CONF_STREAM_SCALE not in result["data"]
+    assert CONF_STREAM_MAXFPS not in result["data"]
