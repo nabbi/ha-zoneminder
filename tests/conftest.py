@@ -171,6 +171,9 @@ def create_mock_monitor(
     mjpeg_image_url: str = "http://zm.example.com/mjpeg/1",
     still_image_url: str = "http://zm.example.com/still/1",
     events: dict[TimePeriod, int | None] | None = None,
+    capturing: str | None = None,
+    analysing: str | None = None,
+    recording: str | None = None,
 ) -> MagicMock:
     """Create a mock Monitor instance with configurable properties."""
     monitor = MagicMock()
@@ -184,6 +187,11 @@ def create_mock_monitor(
     monitor.is_available = is_available
     monitor.mjpeg_image_url = mjpeg_image_url
     monitor.still_image_url = still_image_url
+
+    # ZM 1.37+ individual fields (None = pre-1.37 / field absent)
+    monitor.capturing = capturing
+    monitor.analysing = analysing
+    monitor.recording = recording
 
     if events is None:
         events = {

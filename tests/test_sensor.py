@@ -98,11 +98,19 @@ async def test_monitor_status_sensor_all_states(
     assert state.state == expected_value
 
 
-async def test_monitor_status_sensor_unavailable(
+async def test_monitor_status_sensor_unavailable_monitor_still_shows_state(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test monitor status sensor when monitor is unavailable."""
-    monitors = [create_mock_monitor(name="Front Door", is_available=False, function=None)]
+    """Test status sensor stays available even when monitor daemon is stopped.
+
+    A monitor set to Function=None stops the ZM daemon, making
+    is_available=False. The status sensor should still report the function
+    state ("None") rather than going unavailable, since the API data is
+    still valid.
+    """
+    monitors = [
+        create_mock_monitor(name="Front Door", is_available=False, function=MonitorState.NONE)
+    ]
     await setup_entry(hass, mock_config_entry, monitors=monitors)
 
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
@@ -110,7 +118,7 @@ async def test_monitor_status_sensor_unavailable(
 
     state = hass.states.get("sensor.front_door_status")
     assert state is not None
-    assert state.state == STATE_UNAVAILABLE
+    assert state.state == "None"
 
 
 async def test_monitor_status_sensor_null_function(
@@ -122,6 +130,140 @@ async def test_monitor_status_sensor_null_function(
 
     state = hass.states.get("sensor.front_door_status")
     assert state is not None
+
+
+# --- Status Sensor with ZM 1.37+ individual fields ---
+
+
+async def test_status_sensor_derives_classic_name_from_new_fields(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test status sensor derives classic name when new fields map to a MonitorState."""
+    monitors = [
+        create_mock_monitor(
+            name="Cam",
+            function=MonitorState.MODECT,
+            capturing="Always",
+            analysing="Always",
+            recording="OnMotion",
+        )
+    ]
+    await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.38.0")
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    state = hass.states.get("sensor.cam_status")
+    assert state is not None
+    assert state.state == "Modect"
+
+
+async def test_status_sensor_shows_composed_state_for_unmapped(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test status sensor shows composed string for unmapped field combinations."""
+    monitors = [
+        create_mock_monitor(
+            name="Cam",
+            function=MonitorState.MONITOR,  # stale Function column
+            capturing="Always",
+            analysing="Always",
+            recording="None",
+        )
+    ]
+    await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.38.0")
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    state = hass.states.get("sensor.cam_status")
+    assert state is not None
+    assert state.state == "Always/Always/None"
+
+
+async def test_status_sensor_ondemand_capturing_shows_composed(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test Ondemand capturing (no classic equivalent) shows composed string."""
+    monitors = [
+        create_mock_monitor(
+            name="Cam",
+            function=MonitorState.MONITOR,
+            capturing="Ondemand",
+            analysing="None",
+            recording="None",
+        )
+    ]
+    await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.38.0")
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    state = hass.states.get("sensor.cam_status")
+    assert state is not None
+    assert state.state == "Ondemand/None/None"
+
+
+async def test_status_sensor_falls_back_without_new_fields(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test status sensor falls back to md.function when new fields are absent."""
+    monitors = [
+        create_mock_monitor(
+            name="Cam",
+            function=MonitorState.RECORD,
+            capturing=None,
+            analysing=None,
+            recording=None,
+        )
+    ]
+    await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    state = hass.states.get("sensor.cam_status")
+    assert state is not None
+    assert state.state == "Record"
+
+
+@pytest.mark.parametrize(
+    ("capturing", "analysing", "recording", "expected"),
+    [
+        ("None", "None", "None", "None"),
+        ("Always", "None", "None", "Monitor"),
+        ("Always", "Always", "OnMotion", "Modect"),
+        ("Always", "None", "Always", "Record"),
+        ("Always", "Always", "Always", "Mocord"),
+        ("Always", "None", "OnMotion", "Nodect"),
+    ],
+)
+async def test_status_sensor_all_classic_states_via_new_fields(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    capturing: str,
+    analysing: str,
+    recording: str,
+    expected: str,
+) -> None:
+    """Test status sensor derives all classic MonitorState values from new fields."""
+    monitors = [
+        create_mock_monitor(
+            name="Cam",
+            function=MonitorState.NONE,  # irrelevant, new fields take priority
+            capturing=capturing,
+            analysing=analysing,
+            recording=recording,
+        )
+    ]
+    await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.38.0")
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    state = hass.states.get("sensor.cam_status")
+    assert state is not None
+    assert state.state == expected
 
 
 # --- Event Sensors ---

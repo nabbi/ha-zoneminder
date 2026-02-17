@@ -15,7 +15,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from requests.exceptions import RequestException
 
 from zoneminder.exceptions import ZoneminderError
-from zoneminder.monitor import Monitor, MonitorState
+from zoneminder.monitor import Monitor, MonitorState, _is_zm_137_or_later
 
 from .const import DEFAULT_COMMAND_OFF, DEFAULT_COMMAND_ON, DOMAIN
 from .coordinator import ZmDataUpdateCoordinator
@@ -52,6 +52,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up the ZoneMinder switch platform."""
     entry_data: ZmEntryData = hass.data[DOMAIN][entry.entry_id]
+
+    # On ZM 1.37+, the three select entities (Capturing/Analysing/Recording)
+    # replace the legacy Function switch.
+    if _is_zm_137_or_later(entry_data.coordinator.zm_client.zm_version):
+        return
 
     on_state = MonitorState(entry.options.get(CONF_COMMAND_ON, DEFAULT_COMMAND_ON))
     off_state = MonitorState(entry.options.get(CONF_COMMAND_OFF, DEFAULT_COMMAND_OFF))

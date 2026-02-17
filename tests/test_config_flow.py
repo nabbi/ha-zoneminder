@@ -278,10 +278,42 @@ async def test_options_flow_defaults(hass: HomeAssistant, mock_config_entry) -> 
 
 
 async def test_options_flow_update(hass: HomeAssistant, mock_config_entry) -> None:
-    """Test options flow updates values."""
+    """Test options flow updates values (ZM 1.38+ hides command_on/off)."""
     mock_config_entry.add_to_hass(hass)
 
     client = create_mock_zm_client()
+    with patch(
+        "custom_components.zoneminder.ZoneMinder",
+        return_value=client,
+    ):
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+
+    with patch(
+        "custom_components.zoneminder.ZoneMinder",
+        return_value=client,
+    ):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_INCLUDE_ARCHIVED: True,
+                CONF_MONITORED_CONDITIONS: ["all", "hour"],
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_INCLUDE_ARCHIVED] is True
+    assert result["data"][CONF_MONITORED_CONDITIONS] == ["all", "hour"]
+
+
+async def test_options_flow_shows_command_on_pre137(hass: HomeAssistant, mock_config_entry) -> None:
+    """Test options flow shows command_on/off fields on pre-1.37 ZM."""
+    mock_config_entry.add_to_hass(hass)
+
+    client = create_mock_zm_client(zm_version="1.36.33")
     with patch(
         "custom_components.zoneminder.ZoneMinder",
         return_value=client,
@@ -307,7 +339,5 @@ async def test_options_flow_update(hass: HomeAssistant, mock_config_entry) -> No
         await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["data"][CONF_INCLUDE_ARCHIVED] is True
-    assert result["data"][CONF_MONITORED_CONDITIONS] == ["all", "hour"]
     assert result["data"]["command_on"] == "Record"
     assert result["data"]["command_off"] == "None"

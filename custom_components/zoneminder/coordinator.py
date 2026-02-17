@@ -27,6 +27,9 @@ class ZmMonitorData:
     function: MonitorState | None
     is_recording: bool
     is_available: bool
+    capturing: str | None = None
+    analysing: str | None = None
+    recording: str | None = None
     events: dict[tuple[TimePeriod, bool], int | None] = field(default_factory=dict)
 
 
@@ -91,6 +94,9 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
                     function=monitor.function,
                     is_recording=bool(monitor.is_recording),
                     is_available=monitor.is_available,
+                    capturing=monitor.capturing,
+                    analysing=monitor.analysing,
+                    recording=monitor.recording,
                 )
                 for time_period, include_archived in self._event_queries:
                     counts = event_counts.get((time_period, include_archived))

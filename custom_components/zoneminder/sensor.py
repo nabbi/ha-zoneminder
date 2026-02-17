@@ -16,7 +16,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from zoneminder.monitor import Monitor, TimePeriod
+from zoneminder.monitor import Monitor, TimePeriod, _derive_function
 
 from .const import (
     CONF_INCLUDE_ARCHIVED,
@@ -126,18 +126,19 @@ class ZMSensorMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity)
         )
 
     @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        if not self.coordinator.last_update_success:
-            return False
-        if (data := self.coordinator.data) and (md := data.monitors.get(self._monitor.id)):
-            return bool(md.is_available)
-        return False
-
-    @property
     def native_value(self) -> str | None:
-        """Return the monitor function state."""
+        """Return the monitor function state.
+
+        On ZM 1.37+, if the individual fields are present but don't map
+        to a classic MonitorState, show the composed state instead
+        (e.g. "Always/Always/None").
+        """
         if (data := self.coordinator.data) and (md := data.monitors.get(self._monitor.id)):
+            if md.capturing is not None and md.analysing is not None and md.recording is not None:
+                derived = _derive_function(md.capturing, md.analysing, md.recording)
+                if derived is not None:
+                    return str(derived.value)
+                return f"{md.capturing}/{md.analysing}/{md.recording}"
             if md.function is not None:
                 return str(md.function.value)
         return None

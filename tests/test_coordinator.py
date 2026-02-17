@@ -94,6 +94,50 @@ async def test_bulk_update_monitors_called(
     client.update_all_monitors.assert_called_once_with(monitors)
 
 
+async def test_coordinator_populates_new_monitor_fields(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Coordinator should populate capturing/analysing/recording from monitors."""
+    monitors = [
+        create_mock_monitor(
+            monitor_id=1,
+            capturing="Always",
+            analysing="None",
+            recording="OnMotion",
+        )
+    ]
+    coordinator, _ = await _setup_and_get_coordinator(hass, mock_config_entry, monitors)
+
+    await coordinator.async_refresh()
+
+    md = coordinator.data.monitors[1]
+    assert md.capturing == "Always"
+    assert md.analysing == "None"
+    assert md.recording == "OnMotion"
+
+
+async def test_coordinator_new_fields_none_on_old_zm(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Coordinator should store None for new fields on pre-1.37 ZM."""
+    monitors = [
+        create_mock_monitor(
+            monitor_id=1,
+            capturing=None,
+            analysing=None,
+            recording=None,
+        )
+    ]
+    coordinator, _ = await _setup_and_get_coordinator(hass, mock_config_entry, monitors)
+
+    await coordinator.async_refresh()
+
+    md = coordinator.data.monitors[1]
+    assert md.capturing is None
+    assert md.analysing is None
+    assert md.recording is None
+
+
 async def test_event_counts_prefetched_once_per_period(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:

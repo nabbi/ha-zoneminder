@@ -32,6 +32,7 @@ from homeassistant.helpers.selector import (
 from requests.exceptions import RequestException
 
 from zoneminder.exceptions import LoginError, ZoneminderError
+from zoneminder.monitor import _is_zm_137_or_later
 from zoneminder.zm import ZoneMinder
 
 from .const import (
@@ -189,34 +190,48 @@ class ZoneMinderOptionsFlow(OptionsFlowWithConfigEntry):
 
         options = self.options
 
+        schema_dict: dict[vol.Optional, Any] = {
+            vol.Optional(
+                CONF_INCLUDE_ARCHIVED,
+                default=options.get(CONF_INCLUDE_ARCHIVED, DEFAULT_INCLUDE_ARCHIVED),
+            ): BooleanSelector(),
+            vol.Optional(
+                CONF_MONITORED_CONDITIONS,
+                default=options.get(CONF_MONITORED_CONDITIONS, DEFAULT_MONITORED_CONDITIONS),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=SENSOR_KEYS,
+                    multiple=True,
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+        }
+
+        # command_on/command_off only apply to the legacy switch (pre-1.37 ZM).
+        zm_version = self._get_zm_version()
+        if not _is_zm_137_or_later(zm_version):
+            schema_dict[
+                vol.Optional(
+                    CONF_COMMAND_ON,
+                    default=options.get(CONF_COMMAND_ON, DEFAULT_COMMAND_ON),
+                )
+            ] = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
+            schema_dict[
+                vol.Optional(
+                    CONF_COMMAND_OFF,
+                    default=options.get(CONF_COMMAND_OFF, DEFAULT_COMMAND_OFF),
+                )
+            ] = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
+
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_INCLUDE_ARCHIVED,
-                        default=options.get(CONF_INCLUDE_ARCHIVED, DEFAULT_INCLUDE_ARCHIVED),
-                    ): BooleanSelector(),
-                    vol.Optional(
-                        CONF_MONITORED_CONDITIONS,
-                        default=options.get(
-                            CONF_MONITORED_CONDITIONS, DEFAULT_MONITORED_CONDITIONS
-                        ),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=SENSOR_KEYS,
-                            multiple=True,
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_COMMAND_ON,
-                        default=options.get(CONF_COMMAND_ON, DEFAULT_COMMAND_ON),
-                    ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
-                    vol.Optional(
-                        CONF_COMMAND_OFF,
-                        default=options.get(CONF_COMMAND_OFF, DEFAULT_COMMAND_OFF),
-                    ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
-                }
-            ),
+            data_schema=vol.Schema(schema_dict),
         )
+
+    def _get_zm_version(self) -> str | None:
+        """Get the ZM version from the running integration, if available."""
+        entry_data = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+        if entry_data is not None:
+            version: str | None = entry_data.coordinator.zm_client.zm_version
+            return version
+        return None
