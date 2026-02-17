@@ -33,9 +33,11 @@ async def async_setup_platform(
     """Set up ZoneMinder switch platform (deprecated YAML)."""
     _LOGGER.warning(
         "Configuration of the ZoneMinder switch platform via YAML is deprecated "
-        "and will be removed in a future release. Your existing configuration has "
-        "been imported. Please remove 'switch' entries for 'zoneminder' from your "
-        "configuration.yaml and restart Home Assistant"
+        "and will be removed in a future release. Your connection settings have "
+        "been imported into a config entry, but platform options "
+        "(command_on, command_off) were set to defaults. "
+        "Please review the integration options in the UI, then remove 'switch' "
+        "platform entries for 'zoneminder' from your configuration.yaml"
     )
 
 
