@@ -17,7 +17,7 @@ from zoneminder.monitor import Monitor, MonitorState, TimePeriod
 
 from custom_components.zoneminder.const import DOMAIN
 from custom_components.zoneminder.coordinator import ZmDataUpdateCoordinator
-from custom_components.zoneminder.sensor import setup_platform
+from custom_components.zoneminder.sensor import async_setup_platform
 
 from .conftest import MOCK_HOST, create_mock_monitor, create_mock_zm_client
 
@@ -335,7 +335,7 @@ async def test_include_archived_flag(hass: HomeAssistant, single_server_config) 
     monitors[0].get_events.assert_any_call(TimePeriod.ALL, True)
 
 
-def test_sensor_count_calculation(hass: HomeAssistant) -> None:
+async def test_sensor_count_calculation(hass: HomeAssistant) -> None:
     """Test correct number of sensors created per monitor and client.
 
     For each monitor: 1 status + N event sensors
@@ -358,7 +358,7 @@ def test_sensor_count_calculation(hass: HomeAssistant) -> None:
         "monitored_conditions": ["all", "hour"],
         "include_archived": False,
     }
-    setup_platform(hass, config, mock_add)
+    await async_setup_platform(hass, config, mock_add)
 
     # 2 monitors * (1 status + 2 events) + 1 run state = 7
     assert len(entities) == 7

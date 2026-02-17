@@ -13,7 +13,7 @@ from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.zoneminder.camera import setup_platform
+from custom_components.zoneminder.camera import async_setup_platform
 from custom_components.zoneminder.const import DOMAIN
 from custom_components.zoneminder.coordinator import ZmDataUpdateCoordinator
 
@@ -32,7 +32,7 @@ async def _setup_zm_with_cameras(
     ):
         assert await async_setup_component(hass, DOMAIN, config)
         await hass.async_block_till_done(wait_background_tasks=True)
-        # Camera uses setup_platform (sync), add camera platform explicitly
+        # Add camera platform explicitly
         assert await async_setup_component(
             hass,
             "camera",
@@ -151,8 +151,8 @@ async def test_multi_server_camera_creation(hass: HomeAssistant, multi_server_co
     assert len(states) == 2
 
 
-def test_filter_urllib3_logging_called(hass: HomeAssistant) -> None:
-    """Test filter_urllib3_logging() is called in setup_platform."""
+async def test_filter_urllib3_logging_called(hass: HomeAssistant) -> None:
+    """Test filter_urllib3_logging() is called in async_setup_platform."""
     monitors = [create_mock_monitor()]
     client = create_mock_zm_client(monitors=monitors)
     coordinator = ZmDataUpdateCoordinator(hass, client, monitors, MOCK_HOST)
@@ -161,7 +161,7 @@ def test_filter_urllib3_logging_called(hass: HomeAssistant) -> None:
     hass.data[f"{DOMAIN}_coordinators"] = {MOCK_HOST: coordinator}
 
     with patch("custom_components.zoneminder.camera.filter_urllib3_logging") as mock_filter:
-        setup_platform(hass, {}, MagicMock())
+        await async_setup_platform(hass, {}, MagicMock())
 
     mock_filter.assert_called_once()
 
