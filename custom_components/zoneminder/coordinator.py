@@ -57,6 +57,11 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
         )
         self.zm_client = client
         self.zm_monitors = monitors
+        self._event_queries: set[tuple[TimePeriod, bool]] = set()
+
+    def register_event_queries(self, queries: set[tuple[TimePeriod, bool]]) -> None:
+        """Register (TimePeriod, include_archived) pairs to fetch during refresh."""
+        self._event_queries |= queries
 
     async def _async_update_data(self) -> ZmData:
         """Fetch data from ZoneMinder in one batched executor call."""
@@ -75,11 +80,10 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
                     is_recording=bool(monitor.is_recording),
                     is_available=monitor.is_available,
                 )
-                for time_period in TimePeriod:
-                    for include_archived in (False, True):
-                        monitor_data.events[(time_period, include_archived)] = monitor.get_events(
-                            time_period, include_archived
-                        )
+                for time_period, include_archived in self._event_queries:
+                    monitor_data.events[(time_period, include_archived)] = monitor.get_events(
+                        time_period, include_archived
+                    )
                 data.monitors[monitor.id] = monitor_data
 
             data.run_state = self.zm_client.get_active_state()

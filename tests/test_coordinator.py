@@ -44,7 +44,7 @@ async def test_update_failed_on_key_error(hass: HomeAssistant, single_server_con
     monitors = [create_mock_monitor()]
     coordinator, _client = await _setup_and_get_coordinator(hass, single_server_config, monitors)
 
-    monitors[0].get_events.side_effect = KeyError("missing key")
+    monitors[0].update_monitor.side_effect = KeyError("missing key")
     await coordinator.async_refresh()
 
     assert coordinator.last_update_success is False

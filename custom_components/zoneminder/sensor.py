@@ -76,11 +76,17 @@ async def async_setup_platform(
     include_archived = config[CONF_INCLUDE_ARCHIVED]
     monitored_conditions = config[CONF_MONITORED_CONDITIONS]
 
+    # Only fetch the event queries that configured sensors will consume
+    event_queries: set[tuple[TimePeriod, bool]] = {
+        (TimePeriod.get_time_period(key), include_archived) for key in monitored_conditions
+    }
+
     sensors: list[SensorEntity] = []
     zm_monitors = hass.data.get(f"{DOMAIN}_monitors", {})
     coordinators = hass.data.get(f"{DOMAIN}_coordinators", {})
     for host_name, _zm_client in hass.data[DOMAIN].items():
         coordinator = coordinators[host_name]
+        coordinator.register_event_queries(event_queries)
         monitors = zm_monitors.get(host_name, [])
         if not monitors:
             continue
