@@ -81,6 +81,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 host_name,
                 ex,
             )
+            success = False
         except LoginError as ex:
             _LOGGER.error(
                 "ZoneMinder login failure to %s: %s",

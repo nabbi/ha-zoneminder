@@ -161,12 +161,7 @@ async def test_connection_error_logged(
     single_server_config,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Test RequestsConnectionError is logged but doesn't crash setup.
-
-    Regression: The original code (lines 76-82) catches the ConnectionError
-    and logs it, but does NOT set success=False. This means a connection error
-    doesn't prevent the component from reporting success.
-    """
+    """Test RequestsConnectionError is logged and fails setup."""
     client = create_mock_zm_client()
     client.login.side_effect = RequestsConnectionError("Connection refused")
 
@@ -179,8 +174,7 @@ async def test_connection_error_logged(
 
     assert "ZoneMinder connection failure" in caplog.text
     assert "Connection refused" in caplog.text
-    # The component still reports success (this is the regression behavior)
-    assert result is True
+    assert result is False
 
 
 async def test_multi_server_both_clients_stored(hass: HomeAssistant, multi_server_config) -> None:
@@ -338,7 +332,7 @@ async def test_login_timeout_logged(
     single_server_config,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """requests.Timeout during login should be caught and logged."""
+    """requests.Timeout during login should be caught, logged, and fail setup."""
     client = create_mock_zm_client()
     client.login.side_effect = Timeout("connection timed out")
 
@@ -351,4 +345,4 @@ async def test_login_timeout_logged(
 
     assert "ZoneMinder connection failure" in caplog.text
     assert "connection timed out" in caplog.text
-    assert result is True
+    assert result is False

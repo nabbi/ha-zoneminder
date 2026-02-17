@@ -3,6 +3,10 @@
     "set_run_state": {
       "description": "Sets the ZoneMinder run state.",
       "fields": {
+        "id": {
+          "description": "The hostname of the ZoneMinder server to target.",
+          "name": "Server ID"
+        },
         "name": {
           "description": "The string name of the ZoneMinder run state to set as active.",
           "name": "[%key:common::config_flow::data::name%]"

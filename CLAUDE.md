@@ -69,7 +69,7 @@ tox -e typing
 - The `auto_enable_custom_integrations` autouse fixture in `conftest.py` ensures HA's loader picks up `custom_components/zoneminder/` instead of the built-in integration
 - All patch targets use `custom_components.zoneminder.*` (not `homeassistant.components.zoneminder.*`)
 - `from pytest_homeassistant_custom_component.common import async_fire_time_changed` replaces the core `tests.common` import
-- 88 passing tests, 1 xfailed (known bugs documented with BUG-XX markers)
+- 100 passing tests, 1 xfailed (BUG-08: PTZ control not exposed)
 
 ## Code Style
 
@@ -102,19 +102,21 @@ ha-zoneminder–specific status.
 
 | ID | Description | Commit |
 |----|-------------|--------|
-| BUG-01 | `RequestsConnectionError` caught but `success` not set `False` | `f29dbb9` |
+| BUG-01 | `RequestException` during login didn't set `success = False` | *(this commit)* |
 | BUG-02 | No DataUpdateCoordinator — excessive API calls | `8285e06` |
+| BUG-03 | `Monitor.function` getter calls `update_monitor()` — hidden I/O | `dc3a06d` |
+| BUG-04 | `Monitor.is_available` calls `update_monitor()` — redundant I/O | `dc3a06d` |
 | BUG-05 | No `unique_id` on any entity | `cb74a1a` |
 | BUG-06 | `get_monitors()` called 3x — separate object trees | `242ad7e` |
 | BUG-07 | `LoginError` not caught during setup | `f29dbb9` |
 | BUG-10 | No `DeviceInfo` — entities not grouped | `eee8c6b` |
-| BUG-03 | `Monitor.function` getter calls `update_monitor()` — hidden I/O | *(this commit)* |
-| BUG-04 | `Monitor.is_available` calls `update_monitor()` — redundant I/O | *(this commit)* |
 | BUG-12 | zm-py exceptions unhandled across integration | `0fda937` |
+| — | `set_run_state` service missing `id` field in services.yaml/strings.json | *(this commit)* |
 
 ### Deferred — Feature Requests
 
 | ID | Description | Reason |
 |----|-------------|--------|
 | BUG-08 | PTZ control not exposed | No PTZ test hardware available to validate. zm-py support is complete; HA layer needs ONVIF-style entity service + real hardware testing. |
+| BUG-09 | No config flow (YAML-only) | Future enhancement. Requires migration path from YAML to config entries. |
 | BUG-16 | `Monitor.controllable` unused | Blocked by BUG-08 — will be consumed when PTZ is implemented. |
