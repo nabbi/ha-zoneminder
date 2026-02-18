@@ -13,7 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from requests.exceptions import RequestException
 
 from zoneminder.exceptions import ZoneminderError
-from zoneminder.monitor import Monitor, _is_zm_137_or_later
+from zoneminder.monitor import Monitor, MonitorState, _derive_function, _is_zm_137_or_later
 
 from .const import DOMAIN
 from .coordinator import ZmData, ZmDataUpdateCoordinator
@@ -21,6 +21,7 @@ from .models import ZmEntryData
 
 _LOGGER = logging.getLogger(__name__)
 
+FUNCTION_OPTIONS = [s.value for s in MonitorState]
 CAPTURING_OPTIONS = ["None", "Ondemand", "Always"]
 ANALYSING_OPTIONS = ["None", "Always"]
 RECORDING_OPTIONS = ["None", "OnMotion", "Always"]
@@ -37,6 +38,9 @@ async def async_setup_entry(
     host_name = entry_data.host_name
 
     entities: list[SelectEntity] = [ZMSelectRunState(coordinator, host_name)]
+
+    for monitor in entry_data.monitors:
+        entities.append(ZMSelectFunction(coordinator, monitor, host_name))
 
     if _is_zm_137_or_later(coordinator.zm_client.zm_version):
         for monitor in entry_data.monitors:
@@ -92,6 +96,76 @@ class ZMSelectRunState(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity)
         """Change the ZoneMinder run state."""
         await self.hass.async_add_executor_job(self.coordinator.zm_client.set_active_state, option)
         await self.coordinator.async_request_refresh()
+
+
+class ZMSelectFunction(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity):
+    """Select entity for changing a monitor's function (None/Monitor/Modect/etc).
+
+    On ZM 1.37+, when the individual Capturing/Analysing/Recording fields
+    don't map to a classic MonitorState, ``current_option`` returns "Custom"
+    and ``options`` temporarily includes it so HA's ``@final state`` property
+    passes validation.  "Custom" is a display-only label — the dropdown still
+    lets the user pick any classic function to switch back to.
+    """
+
+    def __init__(
+        self, coordinator: ZmDataUpdateCoordinator, monitor: Monitor, host_name: str
+    ) -> None:
+        """Initialize function select."""
+        super().__init__(coordinator)
+        self._monitor = monitor
+        self._attr_name = f"{monitor.name} Function"
+        self._attr_unique_id = f"{host_name}_{monitor.id}_function"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
+            name=monitor.name,
+            manufacturer="ZoneMinder",
+            via_device=(DOMAIN, host_name),
+        )
+
+    @property
+    def options(self) -> list[str]:
+        """Return selectable options, including 'Custom' when active."""
+        if self.current_option == "Custom":
+            return [*FUNCTION_OPTIONS, "Custom"]
+        return FUNCTION_OPTIONS
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the current function name.
+
+        On ZM 1.37+, derives the classic function from individual fields.
+        Returns "Custom" for non-classic combinations.
+        """
+        data: ZmData | None = self.coordinator.data
+        if data is not None and (md := data.monitors.get(self._monitor.id)):
+            if md.capturing is not None and md.analysing is not None and md.recording is not None:
+                derived = _derive_function(md.capturing, md.analysing, md.recording)
+                if derived is not None:
+                    return str(derived.value)
+                return "Custom"
+            if md.function is not None:
+                return str(md.function.value)
+        return None
+
+    async def async_select_option(self, option: str) -> None:
+        """Change the monitor function."""
+        if option == "Custom":
+            return
+        await self.hass.async_add_executor_job(self._set_function, option)
+        await self.coordinator.async_request_refresh()
+
+    def _set_function(self, value: str) -> None:
+        """Set monitor function (runs in executor)."""
+        try:
+            self._monitor.function = MonitorState(value)
+        except (ZoneminderError, RequestException, KeyError) as err:
+            _LOGGER.error(
+                "Error setting monitor %s Function to %s: %s",
+                self._monitor.name,
+                value,
+                err,
+            )
 
 
 class ZMSelectCapturing(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity):

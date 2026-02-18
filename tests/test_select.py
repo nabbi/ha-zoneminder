@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from unittest.mock import MagicMock
 
 import pytest
 from homeassistant.const import STATE_UNAVAILABLE
@@ -11,6 +12,7 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 from requests.exceptions import Timeout
 from zoneminder.exceptions import ZoneminderError
+from zoneminder.monitor import MonitorState
 
 from custom_components.zoneminder.const import DOMAIN
 
@@ -365,9 +367,231 @@ async def test_multiple_monitors_create_selects(
     ]
     await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.38.0")
 
-    # Each monitor should have 3 selects + 1 run state = 7 total
+    # Each monitor should have 4 selects (function + capturing/analysing/recording)
+    # + 1 run state = 9 total
     states = hass.states.async_all("select")
-    assert len(states) == 7
+    assert len(states) == 9
 
+    assert hass.states.get("select.front_door_function") is not None
     assert hass.states.get("select.front_door_capturing") is not None
+    assert hass.states.get("select.back_yard_function") is not None
     assert hass.states.get("select.back_yard_recording") is not None
+
+
+# --- Per-monitor Function Select Entity ---
+
+
+async def test_function_select_exists(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test function select entity is created."""
+    monitors = [create_mock_monitor(name="Front Door")]
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    state = hass.states.get("select.front_door_function")
+    assert state is not None
+
+
+async def test_function_select_options(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test function select has all 6 classic MonitorState options."""
+    monitors = [create_mock_monitor(name="Cam")]
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    state = hass.states.get("select.cam_function")
+    assert state is not None
+    assert state.attributes.get("options") == [
+        "None",
+        "Monitor",
+        "Modect",
+        "Record",
+        "Mocord",
+        "Nodect",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("function", "expected"),
+    [
+        (MonitorState.NONE, "None"),
+        (MonitorState.MONITOR, "Monitor"),
+        (MonitorState.MODECT, "Modect"),
+        (MonitorState.RECORD, "Record"),
+        (MonitorState.MOCORD, "Mocord"),
+        (MonitorState.NODECT, "Nodect"),
+    ],
+)
+async def test_function_select_current_option_pre137(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    function: MonitorState,
+    expected: str,
+) -> None:
+    """Test current_option for each MonitorState on pre-1.37 ZM."""
+    monitors = [
+        create_mock_monitor(
+            name="Cam",
+            function=function,
+            capturing=None,
+            analysing=None,
+            recording=None,
+        )
+    ]
+    await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    state = hass.states.get("select.cam_function")
+    assert state is not None
+    assert state.state == expected
+
+
+@pytest.mark.parametrize(
+    ("capturing", "analysing", "recording", "expected"),
+    [
+        ("None", "None", "None", "None"),
+        ("Always", "None", "None", "Monitor"),
+        ("Always", "Always", "OnMotion", "Modect"),
+        ("Always", "None", "Always", "Record"),
+        ("Always", "Always", "Always", "Mocord"),
+        ("Always", "None", "OnMotion", "Nodect"),
+    ],
+)
+async def test_function_select_current_option_137_classic(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    capturing: str,
+    analysing: str,
+    recording: str,
+    expected: str,
+) -> None:
+    """Test current_option derives classic function from 1.37+ fields."""
+    monitors = [
+        create_mock_monitor(
+            name="Cam", capturing=capturing, analysing=analysing, recording=recording
+        )
+    ]
+    await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.38.0")
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    state = hass.states.get("select.cam_function")
+    assert state is not None
+    assert state.state == expected
+
+
+async def test_function_select_137_non_classic_returns_custom(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test non-classic 1.37+ combo shows 'Custom' state."""
+    monitors = [
+        create_mock_monitor(name="Cam", capturing="Ondemand", analysing="Always", recording="None")
+    ]
+    await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.38.0")
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    state = hass.states.get("select.cam_function")
+    assert state is not None
+    assert state.state == "Custom"
+    # "Custom" appears in options only while active (HA @final state requires it)
+    assert state.attributes.get("options") == [
+        "None",
+        "Monitor",
+        "Modect",
+        "Record",
+        "Mocord",
+        "Nodect",
+        "Custom",
+    ]
+
+
+async def test_function_select_classic_state_no_custom_in_options(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test 'Custom' is NOT in options when a classic function is active."""
+    monitors = [
+        create_mock_monitor(
+            name="Cam", capturing="Always", analysing="Always", recording="OnMotion"
+        )
+    ]
+    await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.38.0")
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    state = hass.states.get("select.cam_function")
+    assert state is not None
+    assert state.state == "Modect"
+    assert "Custom" not in state.attributes.get("options", [])
+
+
+async def test_function_select_option_calls_setter(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test selecting an option sets monitor.function."""
+    monitors = [create_mock_monitor(name="Cam")]
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": "select.cam_function", "option": "Record"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert monitors[0].function == MonitorState.RECORD
+
+
+async def test_function_select_created_on_old_zm(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test function select IS created on ZM < 1.37 (not version-gated)."""
+    monitors = [create_mock_monitor(name="Cam", capturing=None, analysing=None, recording=None)]
+    await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
+
+    assert hass.states.get("select.cam_function") is not None
+
+
+async def test_function_select_device_info(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test function select has correct device info."""
+    monitors = [create_mock_monitor(name="Cam", monitor_id=7)]
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    entity = hass.data["entity_components"]["select"].get_entity("select.cam_function")
+    assert entity is not None
+    info = entity.device_info
+    assert info is not None
+    assert (DOMAIN, "zm.example.com_7") in info["identifiers"]
+
+
+async def test_function_select_error_logged(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test ZoneminderError from function setter is logged, not raised."""
+    monitors = [create_mock_monitor(name="Cam")]
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    # Make the function setter raise
+    type(monitors[0]).function = monitors[0].function  # preserve current value
+    type(monitors[0]).function = property(
+        fget=lambda self: MonitorState.MODECT,
+        fset=MagicMock(side_effect=ZoneminderError("API error")),
+    )
+
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": "select.cam_function", "option": "Record"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert "Error setting monitor Cam Function to Record" in caplog.text
