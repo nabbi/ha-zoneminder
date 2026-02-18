@@ -12,7 +12,7 @@ The integration uses the same `zoneminder` domain — when installed, it overrid
 
 ### Setup
 ```bash
-python3.14 -m venv .venv
+python3.13 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
 ```
@@ -24,7 +24,7 @@ tox
 
 ### Run tests only
 ```bash
-tox -e py314
+tox -e py313
 # or directly:
 .venv/bin/pytest tests -v
 ```
@@ -78,8 +78,8 @@ tox -e typing
 ## Code Style
 
 - **Ruff** for linting and formatting (line-length=100, target-version=py314)
-- **mypy** for type checking
-- Python 3.14+ only
+- **mypy** for type checking (targets 3.14)
+- Python 3.13+ (tested on both 3.13 and 3.14)
 - Conventional commits: `feat:`, `fix:`, `test:`, `docs:`, `chore:`, `refactor:`
 
 ## Workflow
@@ -94,7 +94,7 @@ Do not ask the user to commit until all four pass. Fix any failures first.
 
 ## Dependencies
 
-- Runtime: `zm-py==0.5.5.dev13`, `homeassistant`
+- Runtime: `zm-py==0.5.5`, `homeassistant`
 - Test: `pytest-homeassistant-custom-component` (pulls in HA core + test fixtures)
 
 ## Bug & Feature Tracking
