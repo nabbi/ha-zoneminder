@@ -61,9 +61,9 @@ shared coordinator data — no entity makes direct API calls for state reads.
 
 Architecture diagrams (draw.io source):
 
-- [Component Architecture](docs/architecture.drawio) — stack overview: HA Core, ha-zoneminder, zm-py, ZoneMinder Server
-- [Coordinator Data Flow](docs/data-flow.drawio) — read/write paths through the ZmDataUpdateCoordinator
-- [Config & Options Flow](docs/config-flow.drawio) — user setup, YAML import, reconfigure, and options flow
+- [Component Architecture](docs/architecture.png) — stack overview: HA Core, ha-zoneminder, zm-py, ZoneMinder Server
+- [Coordinator Data Flow](docs/data-flow.png) — read/write paths through the ZmDataUpdateCoordinator
+- [Config & Options Flow](docs/config-flow.png) — user setup, YAML import, reconfigure, and options flow
 
 ## License
 
