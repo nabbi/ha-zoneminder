@@ -3,10 +3,16 @@
   "name": "ZoneMinder",
   "version": "0.1.2",
   "config_flow": true,
-  "codeowners": ["@nabbi"],
+  "codeowners": [
+    "@nabbi"
+  ],
   "documentation": "https://github.com/nabbi/ha-zoneminder",
   "issue_tracker": "https://github.com/nabbi/ha-zoneminder/issues",
   "iot_class": "local_polling",
-  "loggers": ["zoneminder"],
-  "requirements": ["zm-py==0.5.5"]
+  "loggers": [
+    "zoneminder"
+  ],
+  "requirements": [
+    "zm-py==0.5.5"
+  ]
 }
