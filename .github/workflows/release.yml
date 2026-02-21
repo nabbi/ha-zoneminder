@@ -1,0 +1,35 @@
+# Triggered by v-prefixed semver tags pushed from scripts/bump-version.sh.
+# Tags must have a "v" prefix (e.g. v0.6.0, not 0.6.0).
+# The manifest.json version is already set by the script, so no
+# build-time patching is needed — the zip is built from the repo as-is.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Zip component
+        run: |
+          cd custom_components/zoneminder
+          zip "$GITHUB_WORKSPACE/zoneminder.zip" -r ./
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            zoneminder.zip
