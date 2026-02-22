@@ -73,7 +73,7 @@ tox -e typing
 - The `auto_enable_custom_integrations` autouse fixture in `conftest.py` ensures HA's loader picks up `custom_components/zoneminder/` instead of the built-in integration
 - All patch targets use `custom_components.zoneminder.*` (not `homeassistant.components.zoneminder.*`)
 - `from pytest_homeassistant_custom_component.common import async_fire_time_changed` replaces the core `tests.common` import
-- 162 passing tests, 1 xfailed (BUG-08: PTZ control not exposed)
+- 196 passing tests
 
 ## Code Style
 
@@ -118,10 +118,5 @@ ha-zoneminder–specific status.
 | BUG-12 | zm-py exceptions unhandled across integration | `0fda937` |
 | BUG-13 | `get_run_states()` unused; no select entity for run state control | `eb8e1a1` |
 | — | `set_run_state` service missing `id` field in services.yaml/strings.json | `63c44e2` |
-
-### Deferred — Feature Requests
-
-| ID | Description | Reason |
-|----|-------------|--------|
-| BUG-08 | PTZ control not exposed | No PTZ test hardware available to validate. zm-py support is complete; HA layer needs ONVIF-style entity service + real hardware testing. |
-| BUG-16 | `Monitor.controllable` unused | Blocked by BUG-08 — will be consumed when PTZ is implemented. |
+| BUG-08 | PTZ control not exposed | — |
+| BUG-16 | `Monitor.controllable` unused | — |

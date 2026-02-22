@@ -10,3 +10,39 @@ set_run_state:
       example: "Home"
       selector:
         text:
+
+ptz:
+  target:
+    entity:
+      integration: zoneminder
+      domain: camera
+  fields:
+    direction:
+      required: true
+      example: "right"
+      selector:
+        select:
+          options:
+            - "right"
+            - "left"
+            - "up"
+            - "down"
+            - "up_left"
+            - "up_right"
+            - "down_left"
+            - "down_right"
+
+ptz_preset:
+  target:
+    entity:
+      integration: zoneminder
+      domain: camera
+  fields:
+    preset:
+      required: true
+      example: "1"
+      selector:
+        number:
+          min: 0
+          max: 99
+          mode: box

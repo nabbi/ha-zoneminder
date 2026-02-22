@@ -26,3 +26,9 @@ DEFAULT_INCLUDE_ARCHIVED = False
 DEFAULT_MONITORED_CONDITIONS = ["all"]
 DEFAULT_COMMAND_ON = "Modect"
 DEFAULT_COMMAND_OFF = "Monitor"
+
+SERVICE_PTZ = "ptz"
+SERVICE_PTZ_PRESET = "ptz_preset"
+ATTR_DIRECTION = "direction"
+ATTR_PRESET = "preset"
+SUPPORT_PTZ = 4  # Custom feature bit for PTZ-capable cameras

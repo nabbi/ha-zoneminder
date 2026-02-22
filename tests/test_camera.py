@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from unittest.mock import MagicMock
 
 import pytest
+import voluptuous as vol
 from homeassistant.components.camera import CameraState
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
+from zoneminder.exceptions import MonitorControlTypeError
 
 from custom_components.zoneminder.const import DOMAIN
 
@@ -149,19 +153,6 @@ async def test_empty_server_creates_no_cameras(
     assert len(states) == 0
 
 
-@pytest.mark.xfail(reason="BUG-08: PTZ control not exposed despite zm-py support")
-async def test_camera_supports_ptz(hass: HomeAssistant, mock_config_entry: MockConfigEntry) -> None:
-    """Camera should expose PTZ control when monitor is controllable."""
-    monitors = [create_mock_monitor(name="PTZ Cam")]
-    monitors[0].controllable = True
-    await setup_entry(hass, mock_config_entry, monitors=monitors)
-
-    state = hass.states.get("camera.ptz_cam")
-    assert state is not None
-    supported = state.attributes.get("supported_features", 0)
-    assert supported > 0
-
-
 async def test_get_monitors_called_once(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
@@ -184,3 +175,227 @@ async def test_coordinator_shared_updates(
     assert entity is not None
     assert entity.should_poll is False
     assert hasattr(entity, "coordinator")
+
+
+# --- PTZ tests ---
+
+
+async def test_ptz_supported_features_set_on_controllable(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Controllable cameras should have SUPPORT_PTZ in supported_features."""
+    monitors = [
+        create_mock_monitor(name="PTZ Cam", controllable=True),
+        create_mock_monitor(monitor_id=2, name="Fixed Cam", controllable=False),
+    ]
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    ptz_state = hass.states.get("camera.ptz_cam")
+    assert ptz_state is not None
+    assert ptz_state.attributes.get("supported_features", 0) & 4
+
+    fixed_state = hass.states.get("camera.fixed_cam")
+    assert fixed_state is not None
+    assert not (fixed_state.attributes.get("supported_features", 0) & 4)
+
+
+async def test_ptz_moves_controllable_camera(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """PTZ service call should invoke move_monitor on a controllable camera."""
+    monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    await hass.services.async_call(
+        DOMAIN,
+        "ptz",
+        {"direction": "right"},
+        target={"entity_id": "camera.ptz_cam"},
+        blocking=True,
+    )
+
+    client.move_monitor.assert_called_once_with(monitors[0], "right")
+
+
+async def test_ptz_raises_on_non_controllable(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """PTZ service should raise ServiceNotSupported on non-controllable camera."""
+    monitors = [create_mock_monitor(name="Fixed Cam", controllable=False)]
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            "ptz",
+            {"direction": "up"},
+            target={"entity_id": "camera.fixed_cam"},
+            blocking=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "direction",
+    ["right", "left", "up", "down", "up_left", "up_right", "down_left", "down_right"],
+)
+async def test_ptz_all_directions(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, direction: str
+) -> None:
+    """All 8 PTZ directions should be accepted."""
+    monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    await hass.services.async_call(
+        DOMAIN,
+        "ptz",
+        {"direction": direction},
+        target={"entity_id": "camera.ptz_cam"},
+        blocking=True,
+    )
+
+    client.move_monitor.assert_called_once_with(monitors[0], direction)
+
+
+async def test_ptz_invalid_direction_rejected(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Invalid direction should be rejected by schema validation."""
+    monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    with pytest.raises(vol.MultipleInvalid):
+        await hass.services.async_call(
+            DOMAIN,
+            "ptz",
+            {"direction": "diagonal"},
+            target={"entity_id": "camera.ptz_cam"},
+            blocking=True,
+        )
+
+
+async def test_ptz_api_error_raises(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """zm-py exception should be wrapped in HomeAssistantError."""
+    monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors)
+    client.move_monitor = MagicMock(side_effect=MonitorControlTypeError())
+
+    with pytest.raises(HomeAssistantError, match="Failed to move camera"):
+        await hass.services.async_call(
+            DOMAIN,
+            "ptz",
+            {"direction": "left"},
+            target={"entity_id": "camera.ptz_cam"},
+            blocking=True,
+        )
+
+
+async def test_ptz_returns_false_raises(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """move_monitor returning False should raise HomeAssistantError."""
+    monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors)
+    client.move_monitor = MagicMock(return_value=False)
+
+    with pytest.raises(HomeAssistantError, match="Failed to move camera"):
+        await hass.services.async_call(
+            DOMAIN,
+            "ptz",
+            {"direction": "down"},
+            target={"entity_id": "camera.ptz_cam"},
+            blocking=True,
+        )
+
+
+# --- PTZ preset tests ---
+
+
+async def test_ptz_preset_calls_goto_preset(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """PTZ preset service with preset > 0 should call goto_preset."""
+    monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    await hass.services.async_call(
+        DOMAIN,
+        "ptz_preset",
+        {"preset": 3},
+        target={"entity_id": "camera.ptz_cam"},
+        blocking=True,
+    )
+
+    client.goto_preset.assert_called_once_with(monitors[0], 3)
+
+
+async def test_ptz_preset_zero_calls_goto_home(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """PTZ preset service with preset=0 should call goto_home."""
+    monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    await hass.services.async_call(
+        DOMAIN,
+        "ptz_preset",
+        {"preset": 0},
+        target={"entity_id": "camera.ptz_cam"},
+        blocking=True,
+    )
+
+    client.goto_home.assert_called_once_with(monitors[0])
+
+
+async def test_ptz_preset_raises_on_non_controllable(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """PTZ preset service should raise on non-controllable camera."""
+    monitors = [create_mock_monitor(name="Fixed Cam", controllable=False)]
+    await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            "ptz_preset",
+            {"preset": 1},
+            target={"entity_id": "camera.fixed_cam"},
+            blocking=True,
+        )
+
+
+async def test_ptz_preset_api_error_raises(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """zm-py exception should be wrapped in HomeAssistantError."""
+    monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors)
+    client.goto_preset = MagicMock(side_effect=MonitorControlTypeError())
+
+    with pytest.raises(HomeAssistantError, match="Failed to move camera"):
+        await hass.services.async_call(
+            DOMAIN,
+            "ptz_preset",
+            {"preset": 5},
+            target={"entity_id": "camera.ptz_cam"},
+            blocking=True,
+        )
+
+
+async def test_ptz_preset_returns_false_raises(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """goto_preset returning False should raise HomeAssistantError."""
+    monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors)
+    client.goto_preset = MagicMock(return_value=False)
+
+    with pytest.raises(HomeAssistantError, match="Failed to move camera"):
+        await hass.services.async_call(
+            DOMAIN,
+            "ptz_preset",
+            {"preset": 2},
+            target={"entity_id": "camera.ptz_cam"},
+            blocking=True,
+        )

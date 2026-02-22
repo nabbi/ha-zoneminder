@@ -72,6 +72,26 @@
         }
       },
       "name": "Set run state"
+    },
+    "ptz": {
+      "name": "PTZ control",
+      "description": "Moves a ZoneMinder PTZ camera in the specified direction.",
+      "fields": {
+        "direction": {
+          "name": "Direction",
+          "description": "The direction to move the camera."
+        }
+      }
+    },
+    "ptz_preset": {
+      "name": "PTZ preset",
+      "description": "Moves a ZoneMinder PTZ camera to a preset position (0 = home).",
+      "fields": {
+        "preset": {
+          "name": "Preset",
+          "description": "Preset number (0 for home, 1-99 for saved positions)."
+        }
+      }
     }
   }
 }

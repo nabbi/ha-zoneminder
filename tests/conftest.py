@@ -174,6 +174,7 @@ def create_mock_monitor(
     capturing: str | None = None,
     analysing: str | None = None,
     recording: str | None = None,
+    controllable: bool = False,
 ) -> MagicMock:
     """Create a mock Monitor instance with configurable properties."""
     monitor = MagicMock()
@@ -185,6 +186,7 @@ def create_mock_monitor(
 
     monitor.is_recording = is_recording
     monitor.is_available = is_available
+    monitor.controllable = controllable
     monitor.mjpeg_image_url = mjpeg_image_url
     monitor.still_image_url = still_image_url
 
@@ -268,6 +270,9 @@ def create_mock_zm_client(
 
     client.set_active_state.return_value = True
     client.update_all_monitors.return_value = None
+    client.move_monitor = MagicMock(return_value=True)
+    client.goto_preset = MagicMock(return_value=True)
+    client.goto_home = MagicMock(return_value=True)
 
     # Build get_event_counts mock from monitors' event data.
     # The coordinator pre-fetches event counts per time period; the mock

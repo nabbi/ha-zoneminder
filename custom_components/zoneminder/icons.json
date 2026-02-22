@@ -2,6 +2,12 @@
   "services": {
     "set_run_state": {
       "service": "mdi:cog"
+    },
+    "ptz": {
+      "service": "mdi:pan"
+    },
+    "ptz_preset": {
+      "service": "mdi:map-marker"
     }
   }
 }
