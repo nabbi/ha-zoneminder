@@ -6,7 +6,6 @@ from datetime import timedelta
 from unittest.mock import MagicMock
 
 import pytest
-from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
@@ -62,7 +61,7 @@ async def test_run_state_select_options(
 
     state = hass.states.get("select.run_state_select")
     assert state is not None
-    assert state.attributes.get("options") == ["Away", "Home", "Running"]
+    assert state.attributes.get("options") == ["Away", "Home", "Running", "stop", "restart"]
 
 
 async def test_run_state_select_option_calls_set_active_state(
@@ -83,10 +82,29 @@ async def test_run_state_select_option_calls_set_active_state(
     client.set_active_state.assert_called_once_with("Away")
 
 
-async def test_run_state_select_unavailable(
+@pytest.mark.parametrize("option", ["stop", "restart"])
+async def test_run_state_select_system_commands(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, option: str
+) -> None:
+    """Test selecting stop/restart calls set_active_state with the command name."""
+    monitors = [create_mock_monitor(name="Cam")]
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors)
+
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": "select.run_state_select", "option": option},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    client.set_active_state.assert_called_once_with(option)
+
+
+async def test_run_state_select_shows_stop_when_daemons_down(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test run state select when server is unavailable."""
+    """Test run state select shows 'stop' when daemons are not running."""
     monitors = [create_mock_monitor(name="Cam")]
     await setup_entry(
         hass, mock_config_entry, monitors=monitors, is_available=False, active_state=None
@@ -97,7 +115,7 @@ async def test_run_state_select_unavailable(
 
     state = hass.states.get("select.run_state_select")
     assert state is not None
-    assert state.state == STATE_UNAVAILABLE
+    assert state.state == "stop"
 
 
 async def test_run_state_select_device_info_includes_zm_version(

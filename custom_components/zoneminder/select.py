@@ -26,6 +26,9 @@ CAPTURING_OPTIONS = ["None", "Ondemand", "Always"]
 ANALYSING_OPTIONS = ["None", "Always"]
 RECORDING_OPTIONS = ["None", "OnMotion", "Always"]
 
+# System commands exposed alongside user-defined run states (zmpkg.pl built-ins).
+SYSTEM_STATES = ["stop", "restart"]
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -69,26 +72,30 @@ class ZMSelectRunState(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity)
 
     @property
     def available(self) -> bool:
-        """Return True if entity is available."""
+        """Return True if entity is available.
+
+        Remains available when daemons are stopped (server_available=False)
+        so the user can restart ZoneMinder from the UI.
+        """
         if not self.coordinator.last_update_success:
             return False
-        if data := self.coordinator.data:
-            return bool(data.server_available)
-        return False
+        return self.coordinator.data is not None
 
     @property
     def options(self) -> list[str]:
-        """Return the list of available run states."""
+        """Return the list of available run states plus system commands."""
         data: ZmData | None = self.coordinator.data
         if data is not None:
-            return data.available_run_states
+            return [*data.available_run_states, *SYSTEM_STATES]
         return []
 
     @property
     def current_option(self) -> str | None:
-        """Return the current run state."""
+        """Return the current run state, or 'stop' when daemons are down."""
         data: ZmData | None = self.coordinator.data
         if data is not None:
+            if not data.server_available:
+                return "stop"
             return data.run_state
         return None
 
