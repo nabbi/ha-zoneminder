@@ -10,8 +10,9 @@ ZoneMinder 1.37+ monitor controls.
 
 ## Compatibility
 
-Tested against **ZoneMinder 1.38.0**. Legacy support for 1.36.x and 1.37.x is
-attempted (upstream core still targets these) but untested.
+Tested against **ZoneMinder 1.38.3**.
+
+Older 1.36.x and 1.37.x releases are confirmed working yet likely won't receive additional updates.
 
 ## Installation
 
