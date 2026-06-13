@@ -5,14 +5,16 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntryState
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import Timeout
 from zoneminder.exceptions import LoginError, ZoneminderError
 
+from custom_components.zoneminder import async_setup
 from custom_components.zoneminder.const import CONF_STREAM_MAXFPS, CONF_STREAM_SCALE, DOMAIN
 
 from .conftest import MOCK_HOST, MOCK_HOST_2, create_mock_zm_client, setup_entry
@@ -200,6 +202,38 @@ async def test_yaml_import_fires_flow(hass: HomeAssistant, single_server_config)
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
     assert entries[0].data[CONF_HOST] == MOCK_HOST
+
+    # A repair issue should be created to prompt removal of the YAML config
+    issue_registry = ir.async_get(hass)
+    assert issue_registry.async_get_issue(DOMAIN, f"yaml_import_{MOCK_HOST}") is not None
+
+
+async def test_yaml_removed_clears_import_repair_issue(hass: HomeAssistant) -> None:
+    """Test removing the YAML config clears the stale import repair issue."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=MOCK_HOST,
+        source=SOURCE_IMPORT,
+        data={CONF_HOST: MOCK_HOST, "username": "admin", "password": "secret"},
+    )
+    entry.add_to_hass(hass)
+
+    issue_registry = ir.async_get(hass)
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        f"yaml_import_{MOCK_HOST}",
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="yaml_import",
+        translation_placeholders={"host": MOCK_HOST},
+    )
+    assert issue_registry.async_get_issue(DOMAIN, f"yaml_import_{MOCK_HOST}") is not None
+
+    # YAML config block is gone - async_setup is still called with the remaining config
+    assert await async_setup(hass, {})
+
+    assert issue_registry.async_get_issue(DOMAIN, f"yaml_import_{MOCK_HOST}") is None
 
 
 async def test_entry_setup_passes_stream_options(

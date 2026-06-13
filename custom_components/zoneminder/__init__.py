@@ -59,9 +59,23 @@ CONFIG_SCHEMA = vol.Schema(
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the ZoneMinder component from YAML (import only)."""
     if DOMAIN not in config:
+        # YAML configuration has been removed - clear any stale import repairs
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if entry.source == SOURCE_IMPORT:
+                ir.async_delete_issue(hass, DOMAIN, f"yaml_import_{entry.data[CONF_HOST]}")
         return True
 
     for conf in config[DOMAIN]:
+        host_name = conf[CONF_HOST]
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            f"yaml_import_{host_name}",
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="yaml_import",
+            translation_placeholders={"host": host_name},
+        )
         hass.async_create_task(
             hass.config_entries.flow.async_init(
                 DOMAIN,
@@ -131,17 +145,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-
-    if entry.source == SOURCE_IMPORT:
-        ir.async_create_issue(
-            hass,
-            DOMAIN,
-            f"yaml_import_{host_name}",
-            is_fixable=False,
-            severity=ir.IssueSeverity.WARNING,
-            translation_key="yaml_import",
-            translation_placeholders={"host": host_name},
-        )
 
     return True
 
