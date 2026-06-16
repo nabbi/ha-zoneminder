@@ -43,6 +43,7 @@ for full details on entities, options, YAML migration, and troubleshooting.
 - Run state select entity (dropdown control, not just a sensor)
 - Per-monitor force alarm switch
 - Capturing / Analysing / Recording select entities for ZoneMinder 1.37+
+- PTZ directional control and preset services for controllable cameras
 - Stream scale and max FPS options for bandwidth control
 - Automatic YAML import with migration guidance
 

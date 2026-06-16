@@ -138,6 +138,43 @@ data:
 > **Note:** The Run State select entity provides the same functionality via the UI
 > without needing to write service calls.
 
+### `zoneminder.ptz`
+
+Moves a PTZ-capable camera in a cardinal or diagonal direction. Only available on
+camera entities where ZoneMinder reports the monitor as controllable.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `direction` | Yes | One of: `right`, `left`, `up`, `down`, `up_left`, `up_right`, `down_left`, `down_right` |
+
+Example automation action:
+
+```yaml
+action: zoneminder.ptz
+target:
+  entity_id: camera.front_door
+data:
+  direction: right
+```
+
+### `zoneminder.ptz_preset`
+
+Moves a PTZ-capable camera to a stored preset position. Preset `0` is the home position.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `preset` | Yes | Preset number (0–99). `0` returns the camera to its home position |
+
+Example automation action:
+
+```yaml
+action: zoneminder.ptz_preset
+target:
+  entity_id: camera.front_door
+data:
+  preset: 1
+```
+
 ## Permissions
 
 If ZoneMinder authentication is enabled (`OPT_USE_AUTH`), the configured account
@@ -145,9 +182,6 @@ needs **Edit** permission for **System** to change run states and monitor functi
 
 ## Known Limitations
 
-- **PTZ (Pan/Tilt/Zoom) is not supported.** The underlying zm-py library has full PTZ
-  support, but the Home Assistant entity layer has not been implemented yet due to lack of
-  PTZ-capable test hardware. This is tracked as BUG-08.
 - **Multiple ZoneMinder servers** are supported, but each must have a unique hostname.
 
 ## Troubleshooting

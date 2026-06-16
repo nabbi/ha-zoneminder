@@ -118,5 +118,5 @@ ha-zoneminder–specific status.
 | BUG-12 | zm-py exceptions unhandled across integration | `0fda937` |
 | BUG-13 | `get_run_states()` unused; no select entity for run state control | `eb8e1a1` |
 | — | `set_run_state` service missing `id` field in services.yaml/strings.json | `63c44e2` |
-| BUG-08 | PTZ control not exposed | — |
-| BUG-16 | `Monitor.controllable` unused | — |
+| BUG-08 | PTZ control not exposed | `fe6a450` |
+| BUG-16 | `Monitor.controllable` unused | `fe6a450` |
