@@ -94,7 +94,7 @@ Do not ask the user to commit until all four pass. Fix any failures first.
 
 ## Dependencies
 
-- Runtime: `zm-py==0.5.5`, `homeassistant`
+- Runtime: `zm-py==0.5.6`, `homeassistant`
 - Test: `pytest-homeassistant-custom-component` (pulls in HA core + test fixtures)
 
 ## Bug & Feature Tracking

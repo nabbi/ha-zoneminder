@@ -4,7 +4,7 @@
 
 ZoneMinder custom integration for Home Assistant (HACS-compatible).
 
-This is an independently maintained replacement for the core ZoneMinder integration,
+This is a barrier-free maintained replacement for the core ZoneMinder integration,
 with bug fixes, a modern config flow, coordinator-based polling, and support for
 ZoneMinder 1.37+ monitor controls.
 
