@@ -25,7 +25,7 @@ async def test_run_state_select_exists(
     monitors = [create_mock_monitor(name="Cam")]
     await setup_entry(hass, mock_config_entry, monitors=monitors)
 
-    state = hass.states.get("select.run_state_select")
+    state = hass.states.get("select.zm_example_com_run_state_select")
     assert state is not None
 
 
@@ -39,7 +39,7 @@ async def test_run_state_select_current_option(
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    state = hass.states.get("select.run_state_select")
+    state = hass.states.get("select.zm_example_com_run_state_select")
     assert state is not None
     assert state.state == "Home"
 
@@ -59,7 +59,7 @@ async def test_run_state_select_options(
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    state = hass.states.get("select.run_state_select")
+    state = hass.states.get("select.zm_example_com_run_state_select")
     assert state is not None
     assert state.attributes.get("options") == ["Away", "Home", "Running", "stop", "restart"]
 
@@ -74,7 +74,7 @@ async def test_run_state_select_option_calls_set_active_state(
     await hass.services.async_call(
         "select",
         "select_option",
-        {"entity_id": "select.run_state_select", "option": "Away"},
+        {"entity_id": "select.zm_example_com_run_state_select", "option": "Away"},
         blocking=True,
     )
     await hass.async_block_till_done()
@@ -93,7 +93,7 @@ async def test_run_state_select_system_commands(
     await hass.services.async_call(
         "select",
         "select_option",
-        {"entity_id": "select.run_state_select", "option": option},
+        {"entity_id": "select.zm_example_com_run_state_select", "option": option},
         blocking=True,
     )
     await hass.async_block_till_done()
@@ -113,7 +113,7 @@ async def test_run_state_select_shows_stop_when_daemons_down(
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    state = hass.states.get("select.run_state_select")
+    state = hass.states.get("select.zm_example_com_run_state_select")
     assert state is not None
     assert state.state == "stop"
 
@@ -125,7 +125,9 @@ async def test_run_state_select_device_info_includes_zm_version(
     monitors = [create_mock_monitor(name="Cam")]
     await setup_entry(hass, mock_config_entry, monitors=monitors)
 
-    entity = hass.data["entity_components"]["select"].get_entity("select.run_state_select")
+    entity = hass.data["entity_components"]["select"].get_entity(
+        "select.zm_example_com_run_state_select"
+    )
     assert entity is not None
     info = entity.device_info
     assert info is not None
@@ -144,7 +146,7 @@ async def test_run_state_select_error_zoneminder(
         await hass.services.async_call(
             "select",
             "select_option",
-            {"entity_id": "select.run_state_select", "option": "Away"},
+            {"entity_id": "select.zm_example_com_run_state_select", "option": "Away"},
             blocking=True,
         )
 
@@ -161,7 +163,7 @@ async def test_run_state_select_error_timeout(
         await hass.services.async_call(
             "select",
             "select_option",
-            {"entity_id": "select.run_state_select", "option": "Away"},
+            {"entity_id": "select.zm_example_com_run_state_select", "option": "Away"},
             blocking=True,
         )
 
@@ -172,7 +174,7 @@ async def test_run_state_select_no_monitors(
     """Test select entity is created even with no monitors."""
     await setup_entry(hass, mock_config_entry, monitors=[])
 
-    state = hass.states.get("select.run_state_select")
+    state = hass.states.get("select.zm_example_com_run_state_select")
     assert state is not None
 
 
@@ -223,7 +225,7 @@ async def test_monitor_selects_not_created_on_old_zm(
     assert hass.states.get("select.cam_analysing") is None
     assert hass.states.get("select.cam_recording") is None
     # Run state select should still exist
-    assert hass.states.get("select.run_state_select") is not None
+    assert hass.states.get("select.zm_example_com_run_state_select") is not None
 
 
 async def test_capturing_select_current_option(

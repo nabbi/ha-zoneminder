@@ -58,6 +58,7 @@ class ZMSelectRunState(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity)
     """Select entity for changing the ZoneMinder run state."""
 
     _attr_name = "Run State Select"
+    _attr_has_entity_name = True
 
     def __init__(self, coordinator: ZmDataUpdateCoordinator, host_name: str) -> None:
         """Initialize run state select."""

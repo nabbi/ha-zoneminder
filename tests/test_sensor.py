@@ -357,7 +357,7 @@ async def test_run_state_sensor_exists(
     monitors = [create_mock_monitor(name="Cam")]
     await setup_entry(hass, mock_config_entry, monitors=monitors)
 
-    state = hass.states.get("sensor.run_state")
+    state = hass.states.get("sensor.zm_example_com_run_state")
     assert state is not None
 
 
@@ -371,7 +371,7 @@ async def test_run_state_sensor_value(
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    state = hass.states.get("sensor.run_state")
+    state = hass.states.get("sensor.zm_example_com_run_state")
     assert state is not None
     assert state.state == "Home"
 
@@ -383,7 +383,7 @@ async def test_run_state_device_info_includes_zm_version(
     monitors = [create_mock_monitor(name="Cam")]
     await setup_entry(hass, mock_config_entry, monitors=monitors)
 
-    entity = hass.data["entity_components"]["sensor"].get_entity("sensor.run_state")
+    entity = hass.data["entity_components"]["sensor"].get_entity("sensor.zm_example_com_run_state")
     assert entity is not None
     info = entity.device_info
     assert info is not None
@@ -402,7 +402,7 @@ async def test_run_state_sensor_unavailable(
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    state = hass.states.get("sensor.run_state")
+    state = hass.states.get("sensor.zm_example_com_run_state")
     assert state is not None
     assert state.state == STATE_UNAVAILABLE
 
@@ -419,7 +419,7 @@ async def test_no_monitors_creates_run_state_only(
     # Run state sensor still exists
     states = hass.states.async_all("sensor")
     assert len(states) == 1
-    assert hass.states.get("sensor.run_state") is not None
+    assert hass.states.get("sensor.zm_example_com_run_state") is not None
 
 
 async def test_subset_condition_filtering(

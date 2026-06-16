@@ -185,6 +185,7 @@ class ZMSensorRunState(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity)
     """Get the ZoneMinder run state."""
 
     _attr_name = "Run State"
+    _attr_has_entity_name = True
 
     def __init__(self, coordinator: ZmDataUpdateCoordinator, host_name: str) -> None:
         """Initialize run state sensor."""
