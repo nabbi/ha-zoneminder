@@ -84,9 +84,9 @@ After import, remove all ZoneMinder YAML from your `configuration.yaml`:
 
 | Entity | Type | Description |
 |--------|------|-------------|
-| ZoneMinder Availability | Binary sensor | Server connectivity status |
-| Run State | Sensor | Current active run state (e.g., "default") |
-| Run State | Select | Dropdown to change the active run state |
+| ZoneMinder Availability | Binary sensor | Server connectivity; unavailable when the coordinator cannot reach ZM |
+| Run State | Sensor | Current active run state (e.g., "default"); goes unavailable when ZM daemons are stopped |
+| Run State Select | Select | Dropdown to change the active run state; includes built-in `stop` and `restart` options in addition to user-defined states; remains available even when ZM daemons are stopped so you can restart ZM from the UI |
 
 ### Per Monitor
 
@@ -96,10 +96,12 @@ After import, remove all ZoneMinder YAML from your `configuration.yaml`:
 | Status | Sensor | Current monitor function/state |
 | Events (per period) | Sensor | Event count for selected time periods |
 | Force Alarm | Switch | Trigger or cancel an alarm on the monitor |
+| Function | Select | Set monitor function (None/Monitor/Modect/Record/Mocord/Nodect) — present on all ZM versions |
 
 ### Entities by ZM Version
 
-The monitor control entities differ based on your ZoneMinder version:
+The `Function` select is present on **all ZM versions**. Additional entities appear
+depending on your ZoneMinder version:
 
 **ZoneMinder 1.37+ (new monitor model):**
 
@@ -109,11 +111,15 @@ The monitor control entities differ based on your ZoneMinder version:
 | Analysing | Select | None, Always | Controls motion detection analysis |
 | Recording | Select | None, OnMotion, Always | Controls event recording |
 
+When the three-field state (Capturing/Analysing/Recording) does not correspond to
+a classic function, the `Function` select shows **"Custom"** and the Status sensor
+displays the raw combination (e.g., `Always/Always/None`).
+
 **ZoneMinder < 1.37 (legacy):**
 
 | Entity | Type | Description |
 |--------|------|-------------|
-| Monitor Function | Switch | Toggles between the configured ON/OFF functions (e.g., Modect/Monitor) |
+| {Monitor} State | Switch | Binary toggle between the configured ON function and OFF function (e.g., Modect/Monitor, set in integration options) |
 
 ## Services
 

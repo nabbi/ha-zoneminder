@@ -103,6 +103,7 @@ These entities did not exist in the legacy integration:
 |--------|------|-------------|
 | `switch.*_force_alarm` | Switch | All ZM versions, per monitor |
 | `select.run_state_select` | Select | All ZM versions, per server |
+| `select.*_function` | Select | All ZM versions, per monitor |
 | `select.*_capturing` | Select | ZM 1.37+ only, per monitor |
 | `select.*_analysing` | Select | ZM 1.37+ only, per monitor |
 | `select.*_recording` | Select | ZM 1.37+ only, per monitor |
@@ -146,7 +147,7 @@ significantly. The 30-second interval is not currently configurable.
 
 ## zm-py Version Bump
 
-The integration requires `zm-py==0.5.5.dev13` (up from `0.5.4` in core). This
+The integration requires `zm-py==0.5.6.dev1` (up from `0.5.4` in core). This
 version adds ZM 1.37+ monitor field support, force alarm, and better error handling.
 It installs automatically — just be aware if you have zm-py pinned elsewhere.
 
