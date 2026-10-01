@@ -95,7 +95,7 @@ class ZMSwitchMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntity)
         self._off_state = off_state
         self._attr_name = f"{monitor.name} State"
         self._attr_unique_id = f"{host_name}_{monitor.id}_switch"
-        self._attr_device_info = DeviceInfo(
+        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
             identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
             name=monitor.name,
             manufacturer="ZoneMinder",
@@ -148,7 +148,7 @@ class ZMSwitchForceAlarm(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntit
         self._monitor = monitor
         self._attr_name = f"{monitor.name} Force Alarm"
         self._attr_unique_id = f"{host_name}_{monitor.id}_force_alarm"
-        self._attr_device_info = DeviceInfo(
+        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
             identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
             name=monitor.name,
             manufacturer="ZoneMinder",

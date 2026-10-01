@@ -118,7 +118,7 @@ class ZMSensorMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity)
         self._monitor = monitor
         self._attr_name = f"{monitor.name} Status"
         self._attr_unique_id = f"{host_name}_{monitor.id}_status"
-        self._attr_device_info = DeviceInfo(
+        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
             identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
             name=monitor.name,
             manufacturer="ZoneMinder",
@@ -165,7 +165,7 @@ class ZMSensorEvents(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity):
         self.time_period = TimePeriod.get_time_period(description.key)
         self._attr_name = f"{monitor.name} {self.time_period.title}"
         self._attr_unique_id = f"{host_name}_{monitor.id}_events_{description.key}"
-        self._attr_device_info = DeviceInfo(
+        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
             identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
             name=monitor.name,
             manufacturer="ZoneMinder",

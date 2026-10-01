@@ -111,7 +111,7 @@ class ZoneMinderCamera(CoordinatorEntity[ZmDataUpdateCoordinator], MjpegCamera):
         self._attr_unique_id = f"{host_name}_{monitor.id}"
         if monitor.controllable:
             self._attr_supported_features = CameraEntityFeature(SUPPORT_PTZ)
-        self._attr_device_info = DeviceInfo(
+        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
             identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
             name=monitor.name,
             manufacturer="ZoneMinder",

@@ -124,7 +124,7 @@ class ZMSelectFunction(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity)
         self._monitor = monitor
         self._attr_name = f"{monitor.name} Function"
         self._attr_unique_id = f"{host_name}_{monitor.id}_function"
-        self._attr_device_info = DeviceInfo(
+        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
             identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
             name=monitor.name,
             manufacturer="ZoneMinder",
@@ -189,7 +189,7 @@ class ZMSelectCapturing(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity
         self._monitor = monitor
         self._attr_name = f"{monitor.name} Capturing"
         self._attr_unique_id = f"{host_name}_{monitor.id}_capturing"
-        self._attr_device_info = DeviceInfo(
+        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
             identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
             name=monitor.name,
             manufacturer="ZoneMinder",
@@ -235,7 +235,7 @@ class ZMSelectAnalysing(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity
         self._monitor = monitor
         self._attr_name = f"{monitor.name} Analysing"
         self._attr_unique_id = f"{host_name}_{monitor.id}_analysing"
-        self._attr_device_info = DeviceInfo(
+        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
             identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
             name=monitor.name,
             manufacturer="ZoneMinder",
@@ -281,7 +281,7 @@ class ZMSelectRecording(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity
         self._monitor = monitor
         self._attr_name = f"{monitor.name} Recording"
         self._attr_unique_id = f"{host_name}_{monitor.id}_recording"
-        self._attr_device_info = DeviceInfo(
+        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
             identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
             name=monitor.name,
             manufacturer="ZoneMinder",
