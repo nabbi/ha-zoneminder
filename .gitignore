@@ -10,3 +10,4 @@ build/
 .tox/
 .$*
 *.bkp
+.env.zm_e2e

@@ -26,17 +26,27 @@ If you're developing zm-py changes alongside this integration, install it from y
 instead of PyPI:
 
 ```bash
-pip install -e ../ha-zm-py
+pip install -e ../zm-py
 ```
 
-This assumes the `ha-zm-py` repo is checked out as a sibling directory (the default layout in
+This assumes the zm-py repo is checked out as a sibling directory, `../zm-py` (the default layout in
 the monorepo superproject). The `-e` flag means changes to your local zm-py are picked up
 immediately without reinstalling.
 
 To switch back to the PyPI version:
 
 ```bash
-pip install 'zm-py==0.5.5.dev13'
+pip install 'zm-py==0.5.6'
+```
+
+### Live tests against a real ZoneMinder
+
+`tests/e2e/` sets the integration up against a running ZoneMinder (e.g. a zm-holodeck stack)
+with any zm-py: the pinned release, a local checkout with uncommitted edits, or any pip
+requirement. See [tests/e2e/README.md](tests/e2e/README.md).
+
+```bash
+./scripts/e2e-holodeck.sh --zm-py local --write
 ```
 
 ## Running Tests
