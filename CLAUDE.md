@@ -73,7 +73,10 @@ tox -e typing
 - The `auto_enable_custom_integrations` autouse fixture in `conftest.py` ensures HA's loader picks up `custom_components/zoneminder/` instead of the built-in integration
 - All patch targets use `custom_components.zoneminder.*` (not `homeassistant.components.zoneminder.*`)
 - `from pytest_homeassistant_custom_component.common import async_fire_time_changed` replaces the core `tests.common` import
-- 196 passing tests
+- 205 unit tests (`pytest tests --ignore=tests/e2e`)
+- `tests/e2e/` — live tests against a running ZoneMinder (skipped without `ZM_HOST`); see `tests/e2e/README.md`.
+  `./scripts/e2e-holodeck.sh [-p zm138] [--write] [--zm-py local|<pip spec>]` runs them against a running
+  zm-holodeck stack (never restarts containers). `tox -e e2e-local` tests uncommitted `../zm-py` edits.
 
 ## Code Style
 

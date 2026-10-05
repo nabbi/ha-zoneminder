@@ -67,3 +67,8 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "zm_e2e: live test against a ZoneMinder server (needs ZM_HOST)",
+    "zm_e2e_write: live test that changes server state (needs ZM_E2E_WRITE=1)",
+    "zm_e2e_run_state: live test that switches run states (needs ZM_E2E_RUN_STATE=1)",
+]

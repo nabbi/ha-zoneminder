@@ -126,6 +126,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         monitors = []
 
     coordinator = ZmDataUpdateCoordinator(hass, zm_client, monitors, host_name, config_entry=entry)
+    # Before the first refresh, so event sensors have counts as soon as they are added.
+    coordinator.register_event_queries_from_options(entry.options)
     await coordinator.async_config_entry_first_refresh()
 
     entry_data = ZmEntryData(

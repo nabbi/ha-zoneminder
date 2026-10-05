@@ -300,6 +300,19 @@ async def test_event_sensor_for_each_time_period(
     assert state.state == expected_value
 
 
+async def test_event_sensor_has_value_right_after_setup(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Event counts are fetched by the first refresh, not only at the next poll."""
+    monitors = [create_mock_monitor(name="Front Door")]
+    entry = _entry_with_sensor_options(mock_config_entry, monitored_conditions=["all", "hour"])
+    await setup_entry(hass, entry, monitors=monitors)
+
+    assert hass.states.get("sensor.front_door_events").state == "100"
+    assert hass.states.get("sensor.front_door_events_last_hour").state == "5"
+
+
 async def test_event_sensor_unit_of_measurement(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:

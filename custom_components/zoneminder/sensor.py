@@ -89,11 +89,6 @@ async def async_setup_entry(
         CONF_MONITORED_CONDITIONS, DEFAULT_MONITORED_CONDITIONS
     )
 
-    event_queries: set[tuple[TimePeriod, bool]] = {
-        (TimePeriod.get_time_period(key), include_archived) for key in monitored_conditions
-    }
-    coordinator.register_event_queries(event_queries)
-
     sensors: list[SensorEntity] = []
     for monitor in monitors:
         sensors.append(ZMSensorMonitors(coordinator, monitor, host_name))
