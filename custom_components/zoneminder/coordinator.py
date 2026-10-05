@@ -58,6 +58,8 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
         monitors: list[Monitor],
         host_name: str,
         config_entry: ConfigEntry | None = None,
+        *,
+        server_device_id: str,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -69,6 +71,8 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
         )
         self.zm_client = client
         self.zm_monitors = monitors
+        # Registry id of the server's device, which monitor devices hang off.
+        self.server_device_id = server_device_id
         self._event_queries: set[tuple[TimePeriod, bool]] = set()
 
     def register_event_queries_from_options(self, options: Mapping[str, Any]) -> None:

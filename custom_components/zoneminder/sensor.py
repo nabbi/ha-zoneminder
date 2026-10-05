@@ -11,7 +11,6 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_MONITORED_CONDITIONS
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -25,6 +24,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import ZmDataUpdateCoordinator
+from .device import monitor_device_info, server_device_info
 from .models import ZmEntryData
 
 _LOGGER = logging.getLogger(__name__)
@@ -113,11 +113,8 @@ class ZMSensorMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity)
         self._monitor = monitor
         self._attr_name = f"{monitor.name} Status"
         self._attr_unique_id = f"{host_name}_{monitor.id}_status"
-        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
-            identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
-            name=monitor.name,
-            manufacturer="ZoneMinder",
-            via_device=(DOMAIN, host_name),
+        self._attr_device_info = monitor_device_info(
+            host_name, monitor, coordinator.server_device_id
         )
 
     @property
@@ -160,11 +157,8 @@ class ZMSensorEvents(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity):
         self.time_period = TimePeriod.get_time_period(description.key)
         self._attr_name = f"{monitor.name} {self.time_period.title}"
         self._attr_unique_id = f"{host_name}_{monitor.id}_events_{description.key}"
-        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
-            identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
-            name=monitor.name,
-            manufacturer="ZoneMinder",
-            via_device=(DOMAIN, host_name),
+        self._attr_device_info = monitor_device_info(
+            host_name, monitor, coordinator.server_device_id
         )
 
     @property
@@ -186,12 +180,7 @@ class ZMSensorRunState(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity)
         """Initialize run state sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{host_name}_run_state"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, host_name)},
-            name=host_name,
-            manufacturer="ZoneMinder",
-            sw_version=coordinator.zm_client.zm_version,
-        )
+        self._attr_device_info = server_device_info(host_name, coordinator.zm_client.zm_version)
 
     @property
     def available(self) -> bool:

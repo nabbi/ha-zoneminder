@@ -7,7 +7,6 @@ import logging
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from requests.exceptions import RequestException
@@ -17,6 +16,7 @@ from zoneminder.monitor import Monitor, MonitorState, _derive_function, _is_zm_1
 
 from .const import DOMAIN
 from .coordinator import ZmData, ZmDataUpdateCoordinator
+from .device import monitor_device_info, server_device_info
 from .models import ZmEntryData
 
 _LOGGER = logging.getLogger(__name__)
@@ -64,12 +64,7 @@ class ZMSelectRunState(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity)
         """Initialize run state select."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{host_name}_run_state_select"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, host_name)},
-            name=host_name,
-            manufacturer="ZoneMinder",
-            sw_version=coordinator.zm_client.zm_version,
-        )
+        self._attr_device_info = server_device_info(host_name, coordinator.zm_client.zm_version)
 
     @property
     def available(self) -> bool:
@@ -124,11 +119,8 @@ class ZMSelectFunction(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity)
         self._monitor = monitor
         self._attr_name = f"{monitor.name} Function"
         self._attr_unique_id = f"{host_name}_{monitor.id}_function"
-        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
-            identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
-            name=monitor.name,
-            manufacturer="ZoneMinder",
-            via_device=(DOMAIN, host_name),
+        self._attr_device_info = monitor_device_info(
+            host_name, monitor, coordinator.server_device_id
         )
 
     @property
@@ -189,11 +181,8 @@ class ZMSelectCapturing(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity
         self._monitor = monitor
         self._attr_name = f"{monitor.name} Capturing"
         self._attr_unique_id = f"{host_name}_{monitor.id}_capturing"
-        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
-            identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
-            name=monitor.name,
-            manufacturer="ZoneMinder",
-            via_device=(DOMAIN, host_name),
+        self._attr_device_info = monitor_device_info(
+            host_name, monitor, coordinator.server_device_id
         )
 
     @property
@@ -235,11 +224,8 @@ class ZMSelectAnalysing(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity
         self._monitor = monitor
         self._attr_name = f"{monitor.name} Analysing"
         self._attr_unique_id = f"{host_name}_{monitor.id}_analysing"
-        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
-            identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
-            name=monitor.name,
-            manufacturer="ZoneMinder",
-            via_device=(DOMAIN, host_name),
+        self._attr_device_info = monitor_device_info(
+            host_name, monitor, coordinator.server_device_id
         )
 
     @property
@@ -281,11 +267,8 @@ class ZMSelectRecording(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity
         self._monitor = monitor
         self._attr_name = f"{monitor.name} Recording"
         self._attr_unique_id = f"{host_name}_{monitor.id}_recording"
-        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
-            identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
-            name=monitor.name,
-            manufacturer="ZoneMinder",
-            via_device=(DOMAIN, host_name),
+        self._attr_device_info = monitor_device_info(
+            host_name, monitor, coordinator.server_device_id
         )
 
     @property
