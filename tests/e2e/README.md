@@ -28,7 +28,7 @@ admin password from the stack, by compose project name (no checkout path needed)
 |-----|------------|
 | `.venv/bin/pytest tests/e2e` (or `--zm-py venv`) | whatever `.venv` has. `pip install -e ../zm-py` makes that your working tree |
 | `tox -e e2e-local` (`--zm-py local`) | editable install of `ZM_PY_SRC` (default `../zm-py`), so uncommitted edits are tested, with no commit or release needed |
-| `ZM_PY=<requirement> tox -e e2e` (`--zm-py <requirement>`) | that requirement. Default: the pinned `zm-py==0.5.6` |
+| `ZM_PY=<requirement> tox -e e2e` (`--zm-py <requirement>`) | that requirement. Default: the pinned `zm-py==0.5.7` |
 
 The tox environments skip installing the project (`package = skip`), so the pin in
 `pyproject.toml` can't replace the zm-py you chose. The run ends with a summary of the
