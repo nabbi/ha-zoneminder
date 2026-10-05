@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_MONITORED_CONDITIONS
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from requests.exceptions import RequestException
@@ -14,6 +17,8 @@ from requests.exceptions import RequestException
 from zoneminder.exceptions import ZoneminderError
 from zoneminder.monitor import Monitor, MonitorState, TimePeriod
 from zoneminder.zm import ZoneMinder
+
+from .const import CONF_INCLUDE_ARCHIVED, DEFAULT_INCLUDE_ARCHIVED, DEFAULT_MONITORED_CONDITIONS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,6 +70,14 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
         self.zm_client = client
         self.zm_monitors = monitors
         self._event_queries: set[tuple[TimePeriod, bool]] = set()
+
+    def register_event_queries_from_options(self, options: Mapping[str, Any]) -> None:
+        """Register the event queries the sensor options call for."""
+        include_archived = options.get(CONF_INCLUDE_ARCHIVED, DEFAULT_INCLUDE_ARCHIVED)
+        conditions = options.get(CONF_MONITORED_CONDITIONS, DEFAULT_MONITORED_CONDITIONS)
+        self.register_event_queries(
+            {(TimePeriod.get_time_period(key), include_archived) for key in conditions}
+        )
 
     def register_event_queries(self, queries: set[tuple[TimePeriod, bool]]) -> None:
         """Register (TimePeriod, include_archived) pairs to fetch during refresh."""
