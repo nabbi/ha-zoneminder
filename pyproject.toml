@@ -7,7 +7,7 @@ packages = ["custom_components"]
 
 [project]
 name = "ha-zoneminder"
-version = "0.1.4"
+version = "0.1.5"
 description = "ZoneMinder custom integration for Home Assistant"
 readme = "README.md"
 license = "Apache-2.0"
