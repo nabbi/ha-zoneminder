@@ -10,6 +10,7 @@ import voluptuous as vol
 from homeassistant.components.camera import CameraState
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
@@ -140,7 +141,14 @@ async def test_camera_device_info(hass: HomeAssistant, mock_config_entry: MockCo
     assert (DOMAIN, f"{MOCK_HOST}_1") in info["identifiers"]
     assert info["name"] == "Front Door"
     assert info["manufacturer"] == "ZoneMinder"
-    assert info["via_device"] == (DOMAIN, MOCK_HOST)
+    devices = {
+        identifier: device
+        for device in dr.async_entries_for_config_entry(
+            dr.async_get(hass), mock_config_entry.entry_id
+        )
+        for identifier in device.identifiers
+    }
+    assert devices[(DOMAIN, f"{MOCK_HOST}_1")].via_device_id == devices[(DOMAIN, MOCK_HOST)].id
 
 
 async def test_empty_server_creates_no_cameras(

@@ -15,6 +15,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.typing import ConfigType
 from requests.exceptions import RequestException
@@ -34,6 +35,7 @@ from .const import (
     PLATFORMS,
 )
 from .coordinator import ZmDataUpdateCoordinator
+from .device import server_device_info
 from .models import ZmEntryData
 from .services import async_setup_services
 
@@ -125,7 +127,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error("Error fetching monitors from %s: %s", host_name, ex)
         monitors = []
 
-    coordinator = ZmDataUpdateCoordinator(hass, zm_client, monitors, host_name, config_entry=entry)
+    # Registered before the platforms, so monitor devices can reference it by id.
+    server_device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        **server_device_info(host_name, zm_client.zm_version),
+    )
+
+    coordinator = ZmDataUpdateCoordinator(
+        hass,
+        zm_client,
+        monitors,
+        host_name,
+        config_entry=entry,
+        server_device_id=server_device.id,
+    )
     # Before the first refresh, so event sensors have counts as soon as they are added.
     coordinator.register_event_queries_from_options(entry.options)
     await coordinator.async_config_entry_first_refresh()

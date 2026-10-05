@@ -11,7 +11,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_platform
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -21,6 +20,7 @@ from zoneminder.monitor import Monitor
 
 from .const import ATTR_DIRECTION, ATTR_PRESET, DOMAIN, SERVICE_PTZ, SERVICE_PTZ_PRESET, SUPPORT_PTZ
 from .coordinator import ZmDataUpdateCoordinator
+from .device import monitor_device_info
 from .models import ZmEntryData
 
 _LOGGER = logging.getLogger(__name__)
@@ -111,11 +111,8 @@ class ZoneMinderCamera(CoordinatorEntity[ZmDataUpdateCoordinator], MjpegCamera):
         self._attr_unique_id = f"{host_name}_{monitor.id}"
         if monitor.controllable:
             self._attr_supported_features = CameraEntityFeature(SUPPORT_PTZ)
-        self._attr_device_info = DeviceInfo(  # type: ignore[typeddict-unknown-key]
-            identifiers={(DOMAIN, f"{host_name}_{monitor.id}")},
-            name=monitor.name,
-            manufacturer="ZoneMinder",
-            via_device=(DOMAIN, host_name),
+        self._attr_device_info = monitor_device_info(
+            host_name, monitor, coordinator.server_device_id
         )
 
     @property
