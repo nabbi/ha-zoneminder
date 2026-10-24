@@ -5,6 +5,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["custom_components"]
 
+# aiozoneminder is a git commit until it is on PyPI.
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [project]
 name = "ha-zoneminder"
 version = "0.2.0"
