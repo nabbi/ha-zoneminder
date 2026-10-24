@@ -37,12 +37,20 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .client import create_zm_client
+from .client import create_zm_client, v3_urls
 from .const import (
+    API_AUTO_ORDER,
+    API_V2,
+    API_V3,
+    API_VERSIONS,
+    CONF_API_BACKEND,
+    CONF_API_V3_URL,
+    CONF_API_VERSION,
     CONF_INCLUDE_ARCHIVED,
     CONF_PATH_ZMS,
     CONF_STREAM_MAXFPS,
     CONF_STREAM_SCALE,
+    DEFAULT_API_VERSION,
     DEFAULT_COMMAND_OFF,
     DEFAULT_COMMAND_ON,
     DEFAULT_INCLUDE_ARCHIVED,
@@ -74,8 +82,19 @@ USER_DATA_SCHEMA = vol.Schema(
             TextSelectorConfig(type=TextSelectorType.TEXT)
         ),
         vol.Optional(CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL): BooleanSelector(),
+        vol.Optional(CONF_API_VERSION, default=DEFAULT_API_VERSION): SelectSelector(
+            SelectSelectorConfig(
+                options=API_VERSIONS,
+                mode=SelectSelectorMode.DROPDOWN,
+                translation_key="api_version",
+            )
+        ),
+        vol.Optional(CONF_API_V3_URL): TextSelector(TextSelectorConfig(type=TextSelectorType.URL)),
     }
 )
+
+# When no API connects, report the most telling failure.
+_ERROR_RANK = ["unknown", "cannot_connect"]
 
 CONF_COMMAND_ON = "command_on"
 CONF_COMMAND_OFF = "command_off"
@@ -105,11 +124,11 @@ class ZoneMinderConfigFlow(ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(host)
             self._abort_if_unique_id_configured()
 
-            error = await self._async_validate_connection(user_input)
+            error, data = await self._async_validate_connection(user_input)
             if error is None:
                 return self.async_create_entry(
                     title=host,
-                    data=user_input,
+                    data=data,
                     options={
                         CONF_INCLUDE_ARCHIVED: DEFAULT_INCLUDE_ARCHIVED,
                         CONF_MONITORED_CONDITIONS: DEFAULT_MONITORED_CONDITIONS,
@@ -134,13 +153,16 @@ class ZoneMinderConfigFlow(ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(host)
         self._abort_if_unique_id_configured()
 
-        error = await self._async_validate_connection(import_data)
+        # The YAML configuration was zm-py's, which only spoke API v2.
+        error, data = await self._async_validate_connection(
+            {**import_data, CONF_API_VERSION: import_data.get(CONF_API_VERSION, API_V2)}
+        )
         if error is not None:
             return self.async_abort(reason=error)
 
         return self.async_create_entry(
             title=host,
-            data=import_data,
+            data=data,
             options={
                 CONF_INCLUDE_ARCHIVED: DEFAULT_INCLUDE_ARCHIVED,
                 CONF_MONITORED_CONDITIONS: DEFAULT_MONITORED_CONDITIONS,
@@ -157,11 +179,11 @@ class ZoneMinderConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            error = await self._async_validate_connection(user_input)
+            error, data = await self._async_validate_connection(user_input)
             if error is None:
                 return self.async_update_reload_and_abort(
                     self._get_reconfigure_entry(),
-                    data=user_input,
+                    data=data,
                 )
             errors["base"] = error
 
@@ -177,22 +199,56 @@ class ZoneMinderConfigFlow(ConfigFlow, domain=DOMAIN):
     async def _async_validate_connection(
         self,
         data: dict[str, Any],
+    ) -> tuple[str | None, dict[str, Any]]:
+        """Find the API to use and check the login.
+
+        Returns an error key, or None and the entry data with the API found
+        (``api_backend``) and, for v3, zm-api's address.
+        """
+        choice = data.get(CONF_API_VERSION) or DEFAULT_API_VERSION
+        backends = [choice] if choice in (API_V2, API_V3) else API_AUTO_ORDER
+        errors: list[str] = []
+        for backend in backends:
+            for url in v3_urls(data) if backend == API_V3 else [None]:
+                error = await self._async_try_backend(data, backend, url)
+                if error is None:
+                    found = {**data, CONF_API_VERSION: choice, CONF_API_BACKEND: backend}
+                    if backend == API_V3 and url is not None:
+                        found[CONF_API_V3_URL] = url
+                    return None, found
+                # Both APIs check ZoneMinder's own users, so a refused login ends
+                # the search: trying further would only add failed logins, which
+                # fail2ban or a login throttle count.
+                if error == "invalid_auth":
+                    return error, data
+                errors.append(error)
+        return min(errors, key=_ERROR_RANK.index), data
+
+    async def _async_try_backend(
+        self,
+        data: dict[str, Any],
+        backend: str,
+        v3_url: str | None,
     ) -> str | None:
-        """Validate the user input allows us to connect. Returns error key or None."""
-        zm_client = create_zm_client(self.hass, data)
+        """Log in with one API at one address. Returns an error key or None."""
+        zm_client = create_zm_client(self.hass, data, backend=backend, v3_url=v3_url)
+        where = f"API {backend} at {zm_client.host}"
         try:
             await zm_client.authenticate()
+            # The version is what setup reads first, so check it answers too.
+            await zm_client.get_version()
         except ZMAuthenticationError as ex:
-            _LOGGER.error("ZoneMinder login error: %s", ex)
+            _LOGGER.warning("ZoneMinder login error (%s): %s", where, ex)
             return "invalid_auth"
         except ZMError as ex:
-            _LOGGER.error("ZoneMinder connection error: %s", ex)
+            _LOGGER.warning("ZoneMinder connection error (%s): %s", where, ex)
             return "cannot_connect"
         except Exception:
-            _LOGGER.exception("Unexpected error connecting to ZoneMinder")
+            _LOGGER.exception("Unexpected error connecting to ZoneMinder (%s)", where)
             return "unknown"
         finally:
             await zm_client.close()
+        _LOGGER.debug("ZoneMinder %s answers", where)
         return None
 
 

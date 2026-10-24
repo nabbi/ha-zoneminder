@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import voluptuous as vol
-from aiozoneminder import ZMApiError, ZMNotSupportedError
-from homeassistant.components.camera import CameraState, async_get_image, async_get_stream_source
+from aiozoneminder import ZMApiError, ZMNotSupportedError, ZoneMinderV3Client
+from homeassistant.components.camera import (
+    Camera,
+    CameraState,
+    async_get_image,
+    async_get_stream_source,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
@@ -438,3 +444,22 @@ async def test_camera_image_from_client(
 
     assert image.content == b"\xff\xd8jpeg"
     client.async_get_snapshot.assert_awaited_with(1)
+
+
+async def test_v3_camera_streams_stills(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """API v3 has no MJPEG: the camera serves HA's stream of stills instead."""
+    monitors = [create_mock_monitor(name="Front Door")]
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors, spec=ZoneMinderV3Client)
+    client.async_get_snapshot.return_value = b"\xff\xd8jpeg"
+
+    image = await async_get_image(hass, "camera.front_door")
+    assert image.content == b"\xff\xd8jpeg"
+
+    camera = hass.data["camera"].get_entity("camera.front_door")
+    with patch.object(
+        Camera, "handle_async_still_stream", AsyncMock(return_value="stills")
+    ) as still_stream:
+        assert await camera.handle_async_mjpeg_stream(MagicMock()) == "stills"
+    still_stream.assert_awaited_once()

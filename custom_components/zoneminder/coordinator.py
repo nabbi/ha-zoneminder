@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
 
-from aiozoneminder import Monitor, RunState, ZMApiError, ZMError, ZoneMinderLegacyClient
+from aiozoneminder import Monitor, RunState, ZMApiError, ZMError, ZoneMinderClient
 from aiozoneminder.const import SERVER_ACTIONS
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_MONITORED_CONDITIONS
@@ -55,7 +55,7 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: ZoneMinderLegacyClient,
+        client: ZoneMinderClient,
         monitors: list[Monitor],
         host_name: str,
         config_entry: ConfigEntry | None = None,

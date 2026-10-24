@@ -9,8 +9,8 @@ try:
 except ImportError:  # Home Assistant before 2026.9 validates with voluptuous
     import voluptuous as vol  # type: ignore[no-redef]
 from aiohttp import web
-from aiozoneminder import Monitor, ZMError, ZoneMinderLegacyClient
-from homeassistant.components.camera import CameraEntityFeature
+from aiozoneminder import Monitor, ZMError, ZoneMinderClient, ZoneMinderLegacyClient
+from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.components.mjpeg import MjpegCamera, filter_urllib3_logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_VERIFY_SSL
@@ -99,6 +99,13 @@ async def async_setup_entry(
     )
 
 
+def _mjpeg_url(client: ZoneMinderClient, monitor_id: int) -> str | None:
+    """Return the monitor's MJPEG URL; None on API v3, which has no MJPEG."""
+    if isinstance(client, ZoneMinderLegacyClient):
+        return client.get_stream_url(monitor_id)
+    return None
+
+
 class ZoneMinderCamera(CoordinatorEntity[ZmDataUpdateCoordinator], MjpegCamera):
     """Representation of a ZoneMinder Monitor Stream."""
 
@@ -115,7 +122,7 @@ class ZoneMinderCamera(CoordinatorEntity[ZmDataUpdateCoordinator], MjpegCamera):
             self,
             name=monitor.name,
             # Built again for each stream: it carries the API token, which expires.
-            mjpeg_url=coordinator.zm_client.get_stream_url(monitor.id),
+            mjpeg_url=_mjpeg_url(coordinator.zm_client, monitor.id) or "",
             still_image_url=None,
             verify_ssl=verify_ssl,
         )
@@ -128,17 +135,19 @@ class ZoneMinderCamera(CoordinatorEntity[ZmDataUpdateCoordinator], MjpegCamera):
         )
 
     @property
-    def _zm_client(self) -> ZoneMinderLegacyClient:
+    def _zm_client(self) -> ZoneMinderClient:
         return self.coordinator.zm_client
 
     async def stream_source(self) -> str:
         """Return the MJPEG URL, with a current token."""
-        self._mjpeg_url = self._zm_client.get_stream_url(self._monitor.id)
+        self._mjpeg_url = _mjpeg_url(self._zm_client, self._monitor.id) or ""
         return await super().stream_source()
 
     async def handle_async_mjpeg_stream(self, request: web.Request) -> web.StreamResponse | None:
-        """Proxy the MJPEG stream, with a current token."""
-        self._mjpeg_url = self._zm_client.get_stream_url(self._monitor.id)
+        """Proxy the MJPEG stream, with a current token; on API v3, a stream of stills."""
+        if (url := _mjpeg_url(self._zm_client, self._monitor.id)) is None:
+            return await Camera.handle_async_mjpeg_stream(self, request)
+        self._mjpeg_url = url
         return await super().handle_async_mjpeg_stream(request)
 
     async def async_camera_image(

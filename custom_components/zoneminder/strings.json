@@ -10,7 +10,13 @@
           "ssl": "Use SSL",
           "path": "Path",
           "path_zms": "ZMS path",
-          "verify_ssl": "[%key:common::config_flow::data::verify_ssl%]"
+          "verify_ssl": "[%key:common::config_flow::data::verify_ssl%]",
+          "api_version": "API",
+          "api_v3_url": "zm-api (API v3) URL"
+        },
+        "data_description": {
+          "api_version": "Auto uses API v2 when it answers, else API v3 (zm-api). On API v3 cameras show still images only for now.",
+          "api_v3_url": "Only when zm-api runs on its own address, for example http://zm.local:8080. Empty: look for /api/v3 under the path above, then at the server root."
         }
       },
       "reconfigure": {
@@ -22,7 +28,13 @@
           "ssl": "Use SSL",
           "path": "Path",
           "path_zms": "ZMS path",
-          "verify_ssl": "[%key:common::config_flow::data::verify_ssl%]"
+          "verify_ssl": "[%key:common::config_flow::data::verify_ssl%]",
+          "api_version": "API",
+          "api_v3_url": "zm-api (API v3) URL"
+        },
+        "data_description": {
+          "api_version": "Auto uses API v2 when it answers, else API v3 (zm-api). On API v3 cameras show still images only for now.",
+          "api_v3_url": "Only when zm-api runs on its own address, for example http://zm.local:8080. Empty: look for /api/v3 under the path above, then at the server root."
         }
       }
     },
@@ -91,6 +103,15 @@
           "name": "Preset",
           "description": "Preset number (0 for home, 1-99 for saved positions)."
         }
+      }
+    }
+  },
+  "selector": {
+    "api_version": {
+      "options": {
+        "auto": "Auto",
+        "v2": "API v2 (ZoneMinder web)",
+        "v3": "API v3 (zm-api)"
       }
     }
   }

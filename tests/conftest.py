@@ -12,6 +12,7 @@ from aiozoneminder import (
     RunState,
     ServerInfo,
     ZMAuthenticationError,
+    ZoneMinderLegacyClient,
     function_fields,
 )
 from homeassistant.config_entries import SOURCE_USER
@@ -302,13 +303,14 @@ def create_mock_zm_client(
     active_state: str | None = "Running",
     run_state_names: list[str] | None = None,
     zm_version: str | None = "1.38.0",
+    spec: type = ZoneMinderLegacyClient,
 ) -> MagicMock:
-    """Create a mock aiozoneminder API v2 client.
+    """Create a mock aiozoneminder client, API v2 unless ``spec`` says otherwise.
 
     Reads come from the mock monitors at call time. ``client.is_available``
     (daemonCheck) and ``client.zm_version`` can be changed by tests too.
     """
-    client = MagicMock()
+    client = MagicMock(spec=spec)
     client.is_available = is_available
     client.zm_version = zm_version
     client.verify_ssl = verify_ssl
@@ -388,9 +390,11 @@ async def setup_entry(
     run_state_names: list[str] | None = None,
     zm_version: str | None = "1.38.0",
     verify_ssl: bool = True,
+    spec: type = ZoneMinderLegacyClient,
 ) -> MagicMock:
     """Set up a ZoneMinder config entry and return the mock client."""
     client = create_mock_zm_client(
+        spec=spec,
         monitors=monitors or [],
         is_available=is_available,
         active_state=active_state,
