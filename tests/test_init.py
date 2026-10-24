@@ -50,10 +50,10 @@ async def test_entry_setup_login_called(
     client.authenticate.assert_called_once()
 
 
-async def test_entry_setup_login_failure_not_ready(
+async def test_entry_setup_login_failure_reauth(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test config entry raises ConfigEntryNotReady on login failure."""
+    """A refused login at setup starts reauth instead of retrying (each retry is a failed login)."""
     client = create_mock_zm_client(login_success=False)
     mock_config_entry.add_to_hass(hass)
 
@@ -64,7 +64,10 @@ async def test_entry_setup_login_failure_not_ready(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert mock_config_entry.state is ConfigEntryState.SETUP_ERROR
+    flows = hass.config_entries.flow.async_progress()
+    assert [f["context"]["source"] for f in flows] == ["reauth"]
+    client.authenticate.assert_called_once()
 
 
 async def test_entry_setup_connection_error_not_ready(
@@ -85,10 +88,10 @@ async def test_entry_setup_connection_error_not_ready(
     assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
 
 
-async def test_entry_setup_login_error_not_ready(
+async def test_entry_setup_login_error_reauth(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test config entry raises ConfigEntryNotReady on LoginError."""
+    """ZMAuthenticationError at setup starts reauth."""
     client = create_mock_zm_client()
     client.authenticate.side_effect = ZMAuthenticationError("Invalid credentials")
     mock_config_entry.add_to_hass(hass)
@@ -100,7 +103,10 @@ async def test_entry_setup_login_error_not_ready(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert mock_config_entry.state is ConfigEntryState.SETUP_ERROR
+    flows = hass.config_entries.flow.async_progress()
+    assert [f["context"]["source"] for f in flows] == ["reauth"]
+    client.authenticate.assert_called_once()
 
 
 async def test_entry_setup_timeout_not_ready(

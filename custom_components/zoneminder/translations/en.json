@@ -12,6 +12,14 @@
           "path_zms": "ZMS path",
           "verify_ssl": "Verify SSL certificate"
         }
+      },
+      "reauth_confirm": {
+        "title": "Log in to ZoneMinder again",
+        "description": "ZoneMinder at {host} refused the stored login. Enter the account's current username and password.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -21,7 +29,8 @@
     },
     "abort": {
       "already_configured": "Device is already configured",
-      "cannot_connect": "Failed to connect"
+      "cannot_connect": "Failed to connect",
+      "reauth_successful": "Re-authentication was successful"
     }
   },
   "options": {

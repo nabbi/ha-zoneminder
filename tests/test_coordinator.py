@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import call
 
-from aiozoneminder import ZMApiError, ZMConnectionError
+from aiozoneminder import ZMApiError, ZMAuthenticationError, ZMConnectionError
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 
 from custom_components.zoneminder.const import DOMAIN
 from custom_components.zoneminder.monitor_state import MonitorState, TimePeriod
@@ -199,3 +201,23 @@ async def test_event_counts_prefetched_once_per_period(
         [call(m, include_archived=False) for m in (1, 2, 3)], any_order=True
     )
     assert coordinator.data.monitors[2].events[(TimePeriod.HOUR, False)] == 5
+
+
+async def test_refused_login_starts_reauth(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """A login refused during a refresh starts reauth and stops polling."""
+    client = await setup_entry(hass, mock_config_entry, monitors=[create_mock_monitor()])
+    client.get_monitors.side_effect = ZMAuthenticationError("Invalid username or password")
+    calls = client.get_monitors.call_count
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=31))
+    await hass.async_block_till_done()
+    flows = hass.config_entries.flow.async_progress()
+    assert [f["context"]["source"] for f in flows] == ["reauth"]
+    assert client.get_monitors.call_count == calls + 1
+
+    # No more polling, so no more failed logins, until the user answers.
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=120))
+    await hass.async_block_till_done()
+    assert client.get_monitors.call_count == calls + 1
