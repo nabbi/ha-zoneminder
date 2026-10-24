@@ -2,7 +2,8 @@
 
 These tests set the integration up in a test Home Assistant against a real
 ZoneMinder (e.g. a zm-holodeck stack) and compare what HA shows with what an
-independent zm-py client reads from the same server.
+independent zm-py client reads from the same server. The integration itself
+uses aiozoneminder, so these tests also hold it to zm-py's view.
 
 Configuration comes from the environment or from ``.env.zm_e2e`` in the
 project root (same variable names as zm-py's live suite):
@@ -34,6 +35,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 from urllib.parse import urlsplit
 
+import aiozoneminder
 import pytest
 import pytest_socket
 import zoneminder
@@ -400,10 +402,10 @@ def _relative(path: Path) -> str:
     return os.path.relpath(path.resolve(), _PROJECT_ROOT)
 
 
-def _zm_py_source() -> str:
-    """Describe the installed zm-py: version, and checkout + commit if editable."""
-    dist = metadata.distribution("zm-py")
-    desc = f"zm-py {dist.version}"
+def _dist_source(name: str, package: Path) -> str:
+    """Describe an installed distribution: version, and checkout + commit if editable."""
+    dist = metadata.distribution(name)
+    desc = f"{name} {dist.version}"
     direct_url = dist.read_text("direct_url.json")
     if direct_url:
         info = json.loads(direct_url)
@@ -424,16 +426,20 @@ def _zm_py_source() -> str:
             desc += f", from {info['url']}@{info['vcs_info'].get('commit_id', '')[:10]}"
         else:
             desc += f", from {info['url']}"
-    return f"{desc} ({_relative(Path(zoneminder.__file__).parent)})"
+    return f"{desc} ({_relative(package)})"
 
 
 def pytest_terminal_summary(terminalreporter: Any, exitstatus: int, config: pytest.Config) -> None:
-    """Report the zm-py build and server the live tests ran against."""
+    """Report the aiozoneminder and zm-py builds and the server the live tests ran against."""
     if ZM_CONFIG is None:
         return
     tw = terminalreporter
     tw.write_sep("=", "ZoneMinder E2E")
-    tw.write_line(f"  zm-py: {_zm_py_source()}")
+    tw.write_line(
+        f"  aiozoneminder (integration): "
+        f"{_dist_source('aiozoneminder', Path(aiozoneminder.__file__).parent)}"
+    )
+    tw.write_line(f"  zm-py (reference): {_dist_source('zm-py', Path(zoneminder.__file__).parent)}")
     for label, value in _SUMMARY.items():
         tw.write_line(f"  {label}: {value}")
     tiers = ["read"]

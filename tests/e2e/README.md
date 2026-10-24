@@ -2,8 +2,9 @@
 
 These tests set the integration up in a test Home Assistant against a real ZoneMinder
 server, then check entity states against what a separate zm-py client reads from that
-server. The unit tests mock zm-py, so they can't catch what these do: the order of
-coordinator refreshes, real ZoneMinder responses, and the real zm-py error behaviour.
+server. The integration uses aiozoneminder, so zm-py is an independent reference here. The
+unit tests mock aiozoneminder, so they can't catch what these do: the order of coordinator
+refreshes, real ZoneMinder responses, and the real aiozoneminder error behaviour.
 
 Every test here is skipped unless `ZM_HOST` is set. The `tox` unit environments ignore
 this directory entirely.
@@ -22,7 +23,7 @@ admin password from the stack, by compose project name (no checkout path needed)
 ./scripts/e2e-holodeck.sh -- tests/e2e/test_e2e_entities.py -x   # custom pytest args
 ```
 
-## Choosing the zm-py under test
+## Choosing the zm-py reference
 
 | How | zm-py used |
 |-----|------------|
@@ -31,13 +32,15 @@ admin password from the stack, by compose project name (no checkout path needed)
 | `ZM_PY=<requirement> tox -e e2e` (`--zm-py <requirement>`) | that requirement. Default: the pinned `zm-py==0.5.7` |
 
 The tox environments skip installing the project (`package = skip`), so the pin in
-`pyproject.toml` can't replace the zm-py you chose. The run ends with a summary of the
-zm-py it actually imported: the version, and for an editable install the checkout path and
+`pyproject.toml` can't replace the zm-py you chose. They install aiozoneminder from `AIOZM`
+(any pip requirement; `--aiozm` in the script), default the commit `tox.ini` pins. The run ends
+with a summary of the aiozoneminder and zm-py it actually imported: the version, and for an editable install the checkout path and
 `git describe --dirty`. For example:
 
 ```
 ================================ ZoneMinder E2E ================================
-  zm-py: zm-py 0.5.6, editable from ../zm-py @ 2f08fcb-dirty (../zm-py/zoneminder)
+  aiozoneminder (integration): aiozoneminder 0.1.0, from https://github.com/nabbi/aiozoneminder@dba18398ba (…)
+  zm-py (reference): zm-py 0.5.6, editable from ../zm-py @ 2f08fcb-dirty (../zm-py/zoneminder)
   ZoneMinder: http://127.0.0.1:8480 (version 1.39.36)
   Write target: monitor 7 (axis-1)
   PTZ target: monitor 9 (hikvision-1)

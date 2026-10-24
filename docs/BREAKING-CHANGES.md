@@ -145,11 +145,24 @@ Not a breaking change, but worth knowing:
 If you had ZoneMinder performance issues or API rate limiting, this should help
 significantly. The 30-second interval is not currently configurable.
 
-## zm-py Version Bump
+## API Client: aiozoneminder Replaces zm-py (0.2.0)
 
-The integration requires `zm-py==0.5.6.dev1` (up from `0.5.4` in core). This
-version adds ZM 1.37+ monitor field support, force alarm, and better error handling.
-It installs automatically — just be aware if you have zm-py pinned elsewhere.
+From 0.2.0 the integration uses [aiozoneminder](https://github.com/ZoneMinder/aiozoneminder)
+(async, on Home Assistant's HTTP session) instead of zm-py. Config entries, options,
+entities and their unique IDs are unchanged, so nothing needs reconfiguring.
+
+What you may notice:
+
+- **Camera stream URLs** carry an API token instead of your username and password,
+  and are built for each stream (the token expires).
+- **Logging:** debug logging is under `aiozoneminder` instead of `zoneminder`.
+- **Requirement:** aiozoneminder has no PyPI release yet, so the integration installs a
+  pinned git commit of it. Home Assistant needs to reach GitHub the first time it
+  installs it.
+- **Not supported any more:** ZoneMinder before 1.34 (session-cookie login) and
+  ZoneMinder 1.36.16 to 1.36.25's alarm state numbering, both of which zm-py handled.
+
+Before 0.2.0 the integration required `zm-py` (0.5.6.dev1 up to 0.5.7; core uses 0.5.4).
 
 ## Options Available After Setup
 

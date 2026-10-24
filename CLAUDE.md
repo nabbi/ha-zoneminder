@@ -73,10 +73,11 @@ tox -e typing
 - The `auto_enable_custom_integrations` autouse fixture in `conftest.py` ensures HA's loader picks up `custom_components/zoneminder/` instead of the built-in integration
 - All patch targets use `custom_components.zoneminder.*` (not `homeassistant.components.zoneminder.*`)
 - `from pytest_homeassistant_custom_component.common import async_fire_time_changed` replaces the core `tests.common` import
-- 205 unit tests (`pytest tests --ignore=tests/e2e`)
+- 210 unit tests (`pytest tests --ignore=tests/e2e`)
 - `tests/e2e/` — live tests against a running ZoneMinder (skipped without `ZM_HOST`); see `tests/e2e/README.md`.
-  `./scripts/e2e-holodeck.sh [-p zm138] [--write] [--zm-py local|<pip spec>]` runs them against a running
-  zm-holodeck stack (never restarts containers). `tox -e e2e-local` tests uncommitted `../zm-py` edits.
+  `./scripts/e2e-holodeck.sh [-p zm138] [--write] [--zm-py local|<pip spec>] [--aiozm <pip spec>]` runs them
+  against a running zm-holodeck stack (never restarts containers). zm-py there is the independent
+  reference client; the integration under test uses aiozoneminder.
 
 ## Code Style
 
@@ -97,7 +98,8 @@ Do not ask the user to commit until all four pass. Fix any failures first.
 
 ## Dependencies
 
-- Runtime: `zm-py==0.5.7`, `homeassistant`
+- Runtime: `aiozoneminder` (API v2 client; pinned git commit until it is on PyPI), `homeassistant`
+- `tests/e2e` also needs `zm-py==0.5.7` (dev extra): it reads the server through zm-py, independently
 - Test: `pytest-homeassistant-custom-component` (pulls in HA core + test fixtures)
 
 ## Bug & Feature Tracking

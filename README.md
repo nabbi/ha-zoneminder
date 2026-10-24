@@ -39,7 +39,7 @@ for full details on entities, options, YAML migration, and troubleshooting.
 - Config flow with reconfigure support (no more YAML-only setup)
 - `DataUpdateCoordinator` — single batched API poll every 30s instead of per-entity calls
 - `unique_id` and `DeviceInfo` on all entities
-- Proper error handling for zm-py exceptions across the integration
+- Proper error handling for ZoneMinder API errors across the integration
 - Run state select entity (dropdown control, not just a sensor)
 - Per-monitor force alarm switch
 - Capturing / Analysing / Recording select entities for ZoneMinder 1.37+
@@ -56,14 +56,16 @@ remove the YAML and review options in the UI. See the
 
 ## Architecture
 
-This integration communicates with ZoneMinder through
-[zm-py](https://github.com/rohankapoorcom/zm-py), a lightweight Python API client.
-The coordinator polls zm-py every 30 seconds and all entity platforms read from the
-shared coordinator data — no entity makes direct API calls for state reads.
+This integration communicates with ZoneMinder's API v2 through
+[aiozoneminder](https://github.com/ZoneMinder/aiozoneminder), an async Python client,
+on Home Assistant's own HTTP session. (Up to 0.1.5 it used
+[zm-py](https://github.com/rohankapoorcom/zm-py).) The coordinator polls every 30 seconds
+and all entity platforms read from the shared coordinator data — no entity makes direct
+API calls for state reads.
 
 Architecture diagrams (draw.io source):
 
-- [Component Architecture](docs/architecture.png) — stack overview: HA Core, ha-zoneminder, zm-py, ZoneMinder Server
+- [Component Architecture](docs/architecture.png) — stack overview: HA Core, ha-zoneminder, the API client (drawn as zm-py, now aiozoneminder), ZoneMinder Server
 - [Coordinator Data Flow](docs/data-flow.png) — read/write paths through the ZmDataUpdateCoordinator
 - [Config & Options Flow](docs/config-flow.png) — user setup, YAML import, reconfigure, and options flow
 
