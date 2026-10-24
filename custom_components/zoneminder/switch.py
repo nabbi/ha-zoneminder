@@ -9,6 +9,7 @@ from aiozoneminder import Monitor, ZMError, function_fields
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -122,12 +123,9 @@ class ZMSwitchMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntity)
                 self._monitor.id, capturing=capturing, analysing=analysing, recording=recording
             )
         except ZMError as err:
-            _LOGGER.error(
-                "Error setting monitor %s function to %s: %s",
-                self._monitor.name,
-                state,
-                err,
-            )
+            raise HomeAssistantError(
+                f"Error setting monitor {self._monitor.name} function to {state}: {err}"
+            ) from err
 
 
 class ZMSwitchForceAlarm(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntity):
@@ -177,9 +175,7 @@ class ZMSwitchForceAlarm(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntit
             else:
                 await client.cancel_alarm(self._monitor.id)
         except ZMError as err:
-            _LOGGER.error(
-                "Error setting force alarm %s for monitor %s: %s",
-                "on" if state else "off",
-                self._monitor.name,
-                err,
-            )
+            raise HomeAssistantError(
+                f"Error setting force alarm {'on' if state else 'off'} "
+                f"for monitor {self._monitor.name}: {err}"
+            ) from err

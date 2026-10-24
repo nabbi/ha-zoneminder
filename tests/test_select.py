@@ -7,6 +7,7 @@ from datetime import timedelta
 import pytest
 from aiozoneminder import ZMApiError, ZMConnectionError
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 
@@ -143,7 +144,7 @@ async def test_run_state_select_error_zoneminder(
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
     client.set_run_state.side_effect = ZMApiError("API error")
 
-    with pytest.raises(ZMApiError):
+    with pytest.raises(HomeAssistantError):
         await hass.services.async_call(
             "select",
             "select_option",
@@ -160,7 +161,7 @@ async def test_run_state_select_error_timeout(
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
     client.set_run_state.side_effect = ZMConnectionError("timed out")
 
-    with pytest.raises(ZMConnectionError):
+    with pytest.raises(HomeAssistantError):
         await hass.services.async_call(
             "select",
             "select_option",
@@ -593,21 +594,20 @@ async def test_function_select_device_info(
     assert (DOMAIN, "zm.example.com_7") in info["identifiers"]
 
 
-async def test_function_select_error_logged(
-    hass: HomeAssistant, mock_config_entry: MockConfigEntry, caplog: pytest.LogCaptureFixture
+async def test_function_select_error_raises(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test ZMApiError from the function write is logged, not raised."""
+    """Test ZMApiError from the function write is raised as an error HA shows, not raised."""
     monitors = [create_mock_monitor(name="Cam")]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
 
     client.set_monitor_state.side_effect = ZMApiError("Monitor 1 was not saved: Error")
 
-    await hass.services.async_call(
-        "select",
-        "select_option",
-        {"entity_id": "select.cam_function", "option": "Record"},
-        blocking=True,
-    )
+    with pytest.raises(HomeAssistantError, match="Error setting monitor Cam Function to Record"):
+        await hass.services.async_call(
+            "select",
+            "select_option",
+            {"entity_id": "select.cam_function", "option": "Record"},
+            blocking=True,
+        )
     await hass.async_block_till_done()
-
-    assert "Error setting monitor Cam Function to Record" in caplog.text

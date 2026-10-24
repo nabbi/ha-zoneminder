@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import logging
-
 from aiozoneminder import Monitor, ZMError, function_fields
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -16,8 +15,6 @@ from .coordinator import ZmData, ZmDataUpdateCoordinator
 from .device import monitor_device_info, server_device_info
 from .models import ZmEntryData
 from .monitor_state import MonitorState, derive_function, is_zm_137_or_later
-
-_LOGGER = logging.getLogger(__name__)
 
 FUNCTION_OPTIONS = [s.value for s in MonitorState]
 CAPTURING_OPTIONS = ["None", "Ondemand", "Always"]
@@ -95,7 +92,12 @@ class ZMSelectRunState(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity)
 
     async def async_select_option(self, option: str) -> None:
         """Change the ZoneMinder run state."""
-        await self.coordinator.async_set_run_state(option)
+        try:
+            await self.coordinator.async_set_run_state(option)
+        except ZMError as err:
+            raise HomeAssistantError(
+                f"Error setting ZoneMinder run state to {option}: {err}"
+            ) from err
         await self.coordinator.async_request_refresh()
 
 
@@ -161,12 +163,9 @@ class ZMSelectFunction(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity)
                 self._monitor.id, capturing=capturing, analysing=analysing, recording=recording
             )
         except ZMError as err:
-            _LOGGER.error(
-                "Error setting monitor %s Function to %s: %s",
-                self._monitor.name,
-                value,
-                err,
-            )
+            raise HomeAssistantError(
+                f"Error setting monitor {self._monitor.name} Function to {value}: {err}"
+            ) from err
 
 
 class ZMSelectCapturing(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity):
@@ -204,12 +203,9 @@ class ZMSelectCapturing(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity
         try:
             await self.coordinator.zm_client.set_monitor_state(self._monitor.id, capturing=value)
         except ZMError as err:
-            _LOGGER.error(
-                "Error setting monitor %s Capturing to %s: %s",
-                self._monitor.name,
-                value,
-                err,
-            )
+            raise HomeAssistantError(
+                f"Error setting monitor {self._monitor.name} Capturing to {value}: {err}"
+            ) from err
 
 
 class ZMSelectAnalysing(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity):
@@ -247,12 +243,9 @@ class ZMSelectAnalysing(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity
         try:
             await self.coordinator.zm_client.set_monitor_state(self._monitor.id, analysing=value)
         except ZMError as err:
-            _LOGGER.error(
-                "Error setting monitor %s Analysing to %s: %s",
-                self._monitor.name,
-                value,
-                err,
-            )
+            raise HomeAssistantError(
+                f"Error setting monitor {self._monitor.name} Analysing to {value}: {err}"
+            ) from err
 
 
 class ZMSelectRecording(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity):
@@ -290,9 +283,6 @@ class ZMSelectRecording(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity
         try:
             await self.coordinator.zm_client.set_monitor_state(self._monitor.id, recording=value)
         except ZMError as err:
-            _LOGGER.error(
-                "Error setting monitor %s Recording to %s: %s",
-                self._monitor.name,
-                value,
-                err,
-            )
+            raise HomeAssistantError(
+                f"Error setting monitor {self._monitor.name} Recording to {value}: {err}"
+            ) from err

@@ -7,6 +7,7 @@ import voluptuous as vol
 from aiozoneminder import ZMApiError, ZMConnectionError
 from homeassistant.const import ATTR_ID, ATTR_NAME
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.zoneminder.const import DOMAIN
@@ -78,59 +79,53 @@ async def test_set_run_state_missing_fields_rejected(
         )
 
 
-async def test_set_run_state_invalid_host_graceful(
+async def test_set_run_state_invalid_host_raises(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Invalid host should log error and return without exception."""
+    """Invalid host is raised as an error HA shows."""
     await setup_entry(hass, mock_config_entry)
 
-    await hass.services.async_call(
-        DOMAIN,
-        "set_run_state",
-        {ATTR_ID: "invalid.host", ATTR_NAME: "Away"},
-        blocking=True,
-    )
+    with pytest.raises(ServiceValidationError, match="Invalid ZoneMinder host provided"):
+        await hass.services.async_call(
+            DOMAIN,
+            "set_run_state",
+            {ATTR_ID: "invalid.host", ATTR_NAME: "Away"},
+            blocking=True,
+        )
 
-    assert "Invalid ZoneMinder host provided" in caplog.text
 
-
-async def test_set_active_state_api_error_logged(
+async def test_set_active_state_api_error_raises(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """ZMApiError from set_run_state should be caught and logged."""
+    """ZMApiError from set_run_state is raised as an error HA shows."""
     client = await setup_entry(hass, mock_config_entry)
     client.set_run_state.side_effect = ZMApiError("API error")
 
-    await hass.services.async_call(
-        DOMAIN,
-        "set_run_state",
-        {ATTR_ID: MOCK_HOST, ATTR_NAME: "Away"},
-        blocking=True,
-    )
+    with pytest.raises(HomeAssistantError, match="Error setting ZoneMinder run state"):
+        await hass.services.async_call(
+            DOMAIN,
+            "set_run_state",
+            {ATTR_ID: MOCK_HOST, ATTR_NAME: "Away"},
+            blocking=True,
+        )
     await hass.async_block_till_done()
 
-    assert "Error setting ZoneMinder run state" in caplog.text
 
-
-async def test_set_active_state_request_timeout_logged(
+async def test_set_active_state_request_timeout_raises(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A timeout from set_run_state should be caught and logged."""
+    """A timeout from set_run_state is raised as an error HA shows."""
     client = await setup_entry(hass, mock_config_entry)
     client.set_run_state.side_effect = ZMConnectionError("timed out")
 
-    await hass.services.async_call(
-        DOMAIN,
-        "set_run_state",
-        {ATTR_ID: MOCK_HOST, ATTR_NAME: "Away"},
-        blocking=True,
-    )
+    with pytest.raises(HomeAssistantError, match="Error setting ZoneMinder run state"):
+        await hass.services.async_call(
+            DOMAIN,
+            "set_run_state",
+            {ATTR_ID: MOCK_HOST, ATTR_NAME: "Away"},
+            blocking=True,
+        )
     await hass.async_block_till_done()
-
-    assert "Error setting ZoneMinder run state" in caplog.text

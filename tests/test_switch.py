@@ -15,6 +15,7 @@ from homeassistant.const import (
     STATE_ON,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
@@ -163,10 +164,10 @@ async def test_switch_unique_id(
     assert entry.unique_id is not None
 
 
-async def test_turn_on_api_error_logged(
-    hass: HomeAssistant, mock_config_entry: MockConfigEntry, caplog: pytest.LogCaptureFixture
+async def test_turn_on_api_error_raises(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """ZMApiError during turn_on should be caught and logged."""
+    """ZMApiError during turn_on is raised as an error HA shows."""
     monitors = [create_mock_monitor(name="Front Door", function=MonitorState.MONITOR)]
 
     def raise_on_set(self, value):
@@ -177,21 +178,20 @@ async def test_turn_on_api_error_logged(
 
     await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
 
-    await hass.services.async_call(
-        SWITCH_DOMAIN,
-        SERVICE_TURN_ON,
-        {ATTR_ENTITY_ID: "switch.front_door_state"},
-        blocking=True,
-    )
+    with pytest.raises(HomeAssistantError, match="Error setting monitor"):
+        await hass.services.async_call(
+            SWITCH_DOMAIN,
+            SERVICE_TURN_ON,
+            {ATTR_ENTITY_ID: "switch.front_door_state"},
+            blocking=True,
+        )
     await hass.async_block_till_done()
 
-    assert "Error setting monitor" in caplog.text
 
-
-async def test_turn_off_request_timeout_logged(
-    hass: HomeAssistant, mock_config_entry: MockConfigEntry, caplog: pytest.LogCaptureFixture
+async def test_turn_off_request_timeout_raises(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """requests.Timeout during turn_off should be caught and logged."""
+    """requests.Timeout during turn_off is raised as an error HA shows."""
     monitors = [create_mock_monitor(name="Front Door", function=MonitorState.MODECT)]
 
     def raise_on_set(self, value):
@@ -201,15 +201,14 @@ async def test_turn_off_request_timeout_logged(
 
     await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
 
-    await hass.services.async_call(
-        SWITCH_DOMAIN,
-        SERVICE_TURN_OFF,
-        {ATTR_ENTITY_ID: "switch.front_door_state"},
-        blocking=True,
-    )
+    with pytest.raises(HomeAssistantError, match="Error setting monitor"):
+        await hass.services.async_call(
+            SWITCH_DOMAIN,
+            SERVICE_TURN_OFF,
+            {ATTR_ENTITY_ID: "switch.front_door_state"},
+            blocking=True,
+        )
     await hass.async_block_till_done()
-
-    assert "Error setting monitor" in caplog.text
 
 
 async def test_function_switch_not_created_on_zm_137(
@@ -321,23 +320,22 @@ async def test_force_alarm_turn_off_calls_api(
     client.trigger_alarm.assert_not_awaited()
 
 
-async def test_force_alarm_api_error_logged(
-    hass: HomeAssistant, mock_config_entry: MockConfigEntry, caplog: pytest.LogCaptureFixture
+async def test_force_alarm_api_error_raises(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """ZMApiError during force alarm should be caught and logged."""
+    """ZMApiError during force alarm is raised as an error HA shows."""
     monitors = [create_mock_monitor(name="Front Door", is_recording=False)]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
     client.trigger_alarm.side_effect = ZMApiError("zmu exit 255")
 
-    await hass.services.async_call(
-        SWITCH_DOMAIN,
-        SERVICE_TURN_ON,
-        {ATTR_ENTITY_ID: "switch.front_door_force_alarm"},
-        blocking=True,
-    )
+    with pytest.raises(HomeAssistantError, match="Error setting force alarm"):
+        await hass.services.async_call(
+            SWITCH_DOMAIN,
+            SERVICE_TURN_ON,
+            {ATTR_ENTITY_ID: "switch.front_door_force_alarm"},
+            blocking=True,
+        )
     await hass.async_block_till_done()
-
-    assert "Error setting force alarm" in caplog.text
 
 
 async def test_force_alarm_icon(hass: HomeAssistant, mock_config_entry: MockConfigEntry) -> None:
@@ -375,20 +373,19 @@ async def test_force_alarm_created_on_zm_137(
     assert state is not None
 
 
-async def test_force_alarm_request_timeout_logged(
-    hass: HomeAssistant, mock_config_entry: MockConfigEntry, caplog: pytest.LogCaptureFixture
+async def test_force_alarm_request_timeout_raises(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """A timeout during force alarm should be caught and logged."""
+    """A timeout during force alarm is raised as an error HA shows."""
     monitors = [create_mock_monitor(name="Front Door", is_recording=False)]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
     client.trigger_alarm.side_effect = ZMConnectionError("connection timed out")
 
-    await hass.services.async_call(
-        SWITCH_DOMAIN,
-        SERVICE_TURN_ON,
-        {ATTR_ENTITY_ID: "switch.front_door_force_alarm"},
-        blocking=True,
-    )
+    with pytest.raises(HomeAssistantError, match="Error setting force alarm"):
+        await hass.services.async_call(
+            SWITCH_DOMAIN,
+            SERVICE_TURN_ON,
+            {ATTR_ENTITY_ID: "switch.front_door_force_alarm"},
+            blocking=True,
+        )
     await hass.async_block_till_done()
-
-    assert "Error setting force alarm" in caplog.text
