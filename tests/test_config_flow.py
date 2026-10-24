@@ -559,14 +559,34 @@ async def test_auto_falls_back_to_v3_under_web_path(hass: HomeAssistant) -> None
     assert calls == [(API_V2, None), (API_V3, WEB)]
 
 
-async def test_auto_finds_v3_at_server_root(hass: HomeAssistant) -> None:
-    """zm-api proxied at /api/v3 rather than /zm/api/v3."""
+async def test_auto_skips_server_root(hass: HomeAssistant) -> None:
+    """Auto doesn't look at the server root: a wrong path fails instead of landing on v3."""
     result, calls = await _user_flow(
         hass, {**USER_INPUT, CONF_API_VERSION: API_AUTO}, {(API_V3, ROOT): None}
     )
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert calls == [(API_V2, None), (API_V3, WEB)]
+
+
+async def test_v3_finds_server_root(hass: HomeAssistant) -> None:
+    """API v3 picked: zm-api proxied at /api/v3 rather than /zm/api/v3 is found."""
+    result, calls = await _user_flow(
+        hass, {**USER_INPUT, CONF_API_VERSION: API_V3}, {(API_V3, ROOT): None}
+    )
     assert result["data"][CONF_API_BACKEND] == API_V3
     assert result["data"][CONF_API_V3_URL] == ROOT
-    assert calls == [(API_V2, None), (API_V3, WEB), (API_V3, ROOT)]
+    assert calls == [(API_V3, WEB), (API_V3, ROOT)]
+
+
+async def test_auto_given_v3_url(hass: HomeAssistant) -> None:
+    """Auto with a zm-api URL tries API v2, then that URL only."""
+    result, calls = await _user_flow(
+        hass,
+        {**USER_INPUT, CONF_API_VERSION: API_AUTO, CONF_API_V3_URL: "http://zm.example.com:8080"},
+        {(API_V3, "http://zm.example.com:8080"): None},
+    )
+    assert result["data"][CONF_API_BACKEND] == API_V3
+    assert calls == [(API_V2, None), (API_V3, "http://zm.example.com:8080")]
 
 
 async def test_auto_wrong_password_stops(hass: HomeAssistant) -> None:
@@ -585,7 +605,7 @@ async def test_auto_nothing_answers(hass: HomeAssistant) -> None:
     """No API anywhere: cannot_connect, after every address was tried."""
     result, calls = await _user_flow(hass, {**USER_INPUT, CONF_API_VERSION: API_AUTO}, {})
     assert result["errors"] == {"base": "cannot_connect"}
-    assert calls == [(API_V2, None), (API_V3, WEB), (API_V3, ROOT)]
+    assert calls == [(API_V2, None), (API_V3, WEB)]
 
 
 async def test_auto_unexpected_error_reported(hass: HomeAssistant) -> None:

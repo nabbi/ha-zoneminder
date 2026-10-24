@@ -53,14 +53,15 @@ for full details on entities, options, YAML migration, and troubleshooting.
 The **API** setting picks how the integration talks to ZoneMinder:
 
 - **Auto** (default): ZoneMinder's API v2 when it answers, else API v3
-  ([zm-api](https://github.com/SteveGilvarry/zm-api)), looked for under the path
-  (`/zm/api/v3`) and at the server root (`/api/v3`), or at the zm-api URL when one is given
+  ([zm-api](https://github.com/SteveGilvarry/zm-api)) under the same path (`/zm/api/v3`),
+  or at the zm-api URL when one is given
 - **API v2**: ZoneMinder's own API under the path (`/zm/api`)
-- **API v3**: zm-api only. Set the zm-api URL when it runs on its own port
-  (for example `http://zm.local:8080`)
+- **API v3**: zm-api only, under the path or at the server root (`/api/v3`). Set the
+  zm-api URL when it runs on its own port (for example `http://zm.local:8080`)
 
 The API found is stored with the entry, so Home Assistant doesn't look again at each
-start; **Reconfigure** looks again. Entries made before this setting are API v2.
+start; **Reconfigure** looks again. A wrong password stops the search (both APIs check
+the same ZoneMinder users), and API v2 turned off (`OPT_USE_API`) counts as not answering. Entries made before this setting are API v2.
 Entities and their IDs are the same on both APIs.
 
 API v3 is new here: cameras show still images on it (zm-api has no MJPEG; its HLS

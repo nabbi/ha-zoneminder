@@ -34,7 +34,7 @@ integration detects the server version and exposes the appropriate entities auto
 | Path | No | `/zm/` | Web path to ZoneMinder |
 | ZMS path | No | `/zm/cgi-bin/nph-zms` | Path to the ZMS streaming CGI — must match `PATH_ZMS` in ZoneMinder's Paths settings |
 | API | No | Auto | Auto (API v2 when it answers, else API v3), API v2, or API v3 (zm-api). See the README's "API v2 and API v3" |
-| zm-api URL | No | — | Only for API v3 on its own address, e.g. `http://zm.local:8080`; empty looks under the path, then at the server root |
+| zm-api URL | No | — | Only for API v3 on its own address, e.g. `http://zm.local:8080`; empty looks under the path (API v3 also tries the server root) |
 
 ### Reconfiguring Connection Settings
 

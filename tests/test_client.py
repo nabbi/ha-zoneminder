@@ -54,6 +54,7 @@ def test_urls() -> None:
     """Web path and zm-api candidates for the usual path forms."""
     assert web_url(MOCK_ENTRY_DATA) == "http://zm.example.com/zm"
     assert v3_urls(MOCK_ENTRY_DATA) == ["http://zm.example.com/zm", "http://zm.example.com"]
+    assert v3_urls(MOCK_ENTRY_DATA, root=False) == ["http://zm.example.com/zm"]
     root = {**MOCK_ENTRY_DATA, CONF_PATH: "/", CONF_SSL: True}
     assert web_url(root) == "https://zm.example.com"
     assert v3_urls(root) == ["https://zm.example.com"]

@@ -16,7 +16,7 @@
         },
         "data_description": {
           "api_version": "Auto uses API v2 when it answers, else API v3 (zm-api). On API v3 cameras show still images only for now.",
-          "api_v3_url": "Only when zm-api runs on its own address, for example http://zm.local:8080. Empty: look for /api/v3 under the path above, then at the server root."
+          "api_v3_url": "Only when zm-api runs on its own address, for example http://zm.local:8080. Empty: look for /api/v3 under the path above (API v3 also tries the server root)."
         }
       },
       "reconfigure": {
@@ -34,7 +34,7 @@
         },
         "data_description": {
           "api_version": "Auto uses API v2 when it answers, else API v3 (zm-api). On API v3 cameras show still images only for now.",
-          "api_v3_url": "Only when zm-api runs on its own address, for example http://zm.local:8080. Empty: look for /api/v3 under the path above, then at the server root."
+          "api_v3_url": "Only when zm-api runs on its own address, for example http://zm.local:8080. Empty: look for /api/v3 under the path above (API v3 also tries the server root)."
         }
       }
     },

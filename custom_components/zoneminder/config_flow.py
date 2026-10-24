@@ -209,7 +209,10 @@ class ZoneMinderConfigFlow(ConfigFlow, domain=DOMAIN):
         backends = [choice] if choice in (API_V2, API_V3) else API_AUTO_ORDER
         errors: list[str] = []
         for backend in backends:
-            for url in v3_urls(data) if backend == API_V3 else [None]:
+            # Auto looks for zm-api only where the user pointed: a wrong path
+            # should fail, not land on v3 at the server root.
+            urls = v3_urls(data, root=choice == API_V3) if backend == API_V3 else [None]
+            for url in urls:
                 error = await self._async_try_backend(data, backend, url)
                 if error is None:
                     found = {**data, CONF_API_VERSION: choice, CONF_API_BACKEND: backend}

@@ -43,15 +43,16 @@ def web_url(data: Mapping[str, Any]) -> str:
     return f"{_origin(data)}/{path}" if path else _origin(data)
 
 
-def v3_urls(data: Mapping[str, Any]) -> list[str]:
+def v3_urls(data: Mapping[str, Any], *, root: bool = True) -> list[str]:
     """Return where to look for zm-api: the URL given, else the web path, then the server root.
 
     zm-api serves /api/v3 on its own port (8080) or behind the web server's
-    proxy, under the web path (/zm/api/v3) or at the root (/api/v3).
+    proxy, under the web path (/zm/api/v3) or at the root (/api/v3). ``root``
+    False leaves the server root out.
     """
     if url := (data.get(CONF_API_V3_URL) or "").strip().rstrip("/"):
         return [url]
-    return list(dict.fromkeys([web_url(data), _origin(data)]))
+    return list(dict.fromkeys([web_url(data), *([_origin(data)] if root else [])]))
 
 
 def create_zm_client(
