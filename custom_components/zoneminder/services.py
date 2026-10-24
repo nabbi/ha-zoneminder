@@ -2,7 +2,10 @@
 
 import logging
 
-import voluptuous as vol
+try:
+    import probatio as vol
+except ImportError:  # Home Assistant before 2026.9 validates with voluptuous
+    import voluptuous as vol  # type: ignore[no-redef]
 from homeassistant.const import ATTR_ID, ATTR_NAME
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import config_validation as cv

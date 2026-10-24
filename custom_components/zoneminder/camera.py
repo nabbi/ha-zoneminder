@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 
-import voluptuous as vol
+try:
+    import probatio as vol
+except ImportError:  # Home Assistant before 2026.9 validates with voluptuous
+    import voluptuous as vol  # type: ignore[no-redef]
 from homeassistant.components.camera import CameraEntityFeature
 from homeassistant.components.mjpeg import MjpegCamera, filter_urllib3_logging
 from homeassistant.config_entries import ConfigEntry

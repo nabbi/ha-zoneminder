@@ -2,7 +2,10 @@
 
 import logging
 
-import voluptuous as vol
+try:
+    import probatio as vol
+except ImportError:  # Home Assistant before 2026.9 validates with voluptuous
+    import voluptuous as vol  # type: ignore[no-redef]
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import (
     CONF_HOST,
