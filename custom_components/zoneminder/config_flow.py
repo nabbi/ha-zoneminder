@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import voluptuous as vol
+try:
+    import probatio as vol
+except ImportError:  # Home Assistant before 2026.9 validates with voluptuous
+    import voluptuous as vol  # type: ignore[no-redef]
 from homeassistant.config_entries import (
     ConfigFlow,
     ConfigFlowResult,
