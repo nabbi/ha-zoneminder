@@ -162,6 +162,13 @@ What you may notice:
 - **Not supported any more:** ZoneMinder before 1.34 (session-cookie login) and
   ZoneMinder 1.36.16 to 1.36.25's alarm state numbering, both of which zm-py handled.
 
+- **Failed changes are errors:** when ZoneMinder refuses or can't make a change (monitor
+  Function or Capturing/Analysing/Recording, force alarm, run state, the `set_run_state`
+  service, for example because the account lacks Edit rights), Home Assistant now shows the
+  error, and a script or automation making that call stops there. Before, the failure was
+  only logged and the change looked accepted. An unknown `id` in `set_run_state` is an error
+  too.
+
 Before 0.2.0 the integration required `zm-py` (0.5.6.dev1 up to 0.5.7; core uses 0.5.4).
 
 ## Options Available After Setup

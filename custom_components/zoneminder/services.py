@@ -1,7 +1,5 @@
 """Support for ZoneMinder."""
 
-import logging
-
 try:
     import probatio as vol
 except ImportError:  # Home Assistant before 2026.9 validates with voluptuous
@@ -9,11 +7,10 @@ except ImportError:  # Home Assistant before 2026.9 validates with voluptuous
 from aiozoneminder import ZMError
 from homeassistant.const import ATTR_ID, ATTR_NAME
 from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN
-
-_LOGGER = logging.getLogger(__name__)
 
 SERVICE_SET_RUN_STATE = "set_run_state"
 SET_RUN_STATE_SCHEMA = vol.Schema(
@@ -29,8 +26,7 @@ async def _async_set_active_state(call: ServiceCall) -> None:
     host_map: dict[str, str] = call.hass.data.get(f"{DOMAIN}_host_map", {})
     entry_id = host_map.get(zm_id)
     if entry_id is None:
-        _LOGGER.error("Invalid ZoneMinder host provided: %s", zm_id)
-        return
+        raise ServiceValidationError(f"Invalid ZoneMinder host provided: {zm_id}")
 
     from .models import ZmEntryData
 
@@ -38,12 +34,9 @@ async def _async_set_active_state(call: ServiceCall) -> None:
     try:
         await entry_data.coordinator.async_set_run_state(state_name)
     except ZMError as err:
-        _LOGGER.error(
-            "Error setting ZoneMinder run state on %s to %s: %s",
-            zm_id,
-            state_name,
-            err,
-        )
+        raise HomeAssistantError(
+            f"Error setting ZoneMinder run state on {zm_id} to {state_name}: {err}"
+        ) from err
 
 
 @callback
