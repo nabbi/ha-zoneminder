@@ -6,6 +6,7 @@ try:
     import probatio as vol
 except ImportError:  # Home Assistant before 2026.9 validates with voluptuous
     import voluptuous as vol  # type: ignore[no-redef]
+from aiozoneminder import ZMError
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import (
     CONF_HOST,
@@ -21,15 +22,10 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.typing import ConfigType
-from requests.exceptions import RequestException
 
-from zoneminder.exceptions import LoginError, ZoneminderError
-from zoneminder.zm import ZoneMinder
-
+from .client import create_zm_client
 from .const import (
     CONF_PATH_ZMS,
-    CONF_STREAM_MAXFPS,
-    CONF_STREAM_SCALE,
     DEFAULT_PATH,
     DEFAULT_PATH_ZMS,
     DEFAULT_SSL,
@@ -96,44 +92,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up ZoneMinder from a config entry."""
     conf = entry.data
     host_name = conf[CONF_HOST]
-    protocol = "https" if conf.get(CONF_SSL, DEFAULT_SSL) else "http"
-    server_origin = f"{protocol}://{host_name}"
 
-    options = entry.options
-    stream_scale_val = options.get(CONF_STREAM_SCALE)
-    stream_scale = int(stream_scale_val) if stream_scale_val is not None else None
-    stream_maxfps_val = options.get(CONF_STREAM_MAXFPS)
-    stream_maxfps = float(stream_maxfps_val) if stream_maxfps_val is not None else None
-
-    zm_client = ZoneMinder(
-        server_origin,
-        conf.get(CONF_USERNAME),
-        conf.get(CONF_PASSWORD),
-        conf.get(CONF_PATH, DEFAULT_PATH),
-        conf.get(CONF_PATH_ZMS, DEFAULT_PATH_ZMS),
-        conf.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
-        stream_scale=stream_scale,
-        stream_maxfps=stream_maxfps,
-    )
+    zm_client = create_zm_client(hass, conf, entry.options)
 
     try:
-        result = await hass.async_add_executor_job(zm_client.login)
-    except (RequestException, LoginError, ZoneminderError) as ex:
+        await zm_client.authenticate()
+        zm_version = await zm_client.get_version()
+    except ZMError as ex:
+        await zm_client.close()
         raise ConfigEntryNotReady(f"Cannot connect to ZoneMinder at {host_name}: {ex}") from ex
 
-    if not result:
-        raise ConfigEntryNotReady(f"Login failed for ZoneMinder at {host_name}")
-
     try:
-        monitors = await hass.async_add_executor_job(zm_client.get_monitors)
-    except (ZoneminderError, RequestException, KeyError) as ex:
+        monitors = await zm_client.get_monitors()
+    except ZMError as ex:
         _LOGGER.error("Error fetching monitors from %s: %s", host_name, ex)
         monitors = []
 
     # Registered before the platforms, so monitor devices can reference it by id.
     server_device = dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
-        **server_device_info(host_name, zm_client.zm_version),
+        **server_device_info(host_name, zm_version),
     )
 
     coordinator = ZmDataUpdateCoordinator(
@@ -143,6 +121,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         host_name,
         config_entry=entry,
         server_device_id=server_device.id,
+        zm_version=zm_version,
     )
     # Before the first refresh, so event sensors have counts as soon as they are added.
     coordinator.register_event_queries_from_options(entry.options)
@@ -178,6 +157,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a ZoneMinder config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         entry_data: ZmEntryData = hass.data[DOMAIN].pop(entry.entry_id)
+        await entry_data.client.close()
 
         host_map: dict[str, str] = hass.data.get(f"{DOMAIN}_host_map", {})
         host_map.pop(entry_data.host_name, None)

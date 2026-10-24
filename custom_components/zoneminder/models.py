@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from zoneminder.monitor import Monitor
-from zoneminder.zm import ZoneMinder
+from aiozoneminder import Monitor, ZoneMinderLegacyClient
 
 from .coordinator import ZmDataUpdateCoordinator
 
@@ -14,7 +13,7 @@ from .coordinator import ZmDataUpdateCoordinator
 class ZmEntryData:
     """Runtime data stored in hass.data for a single config entry."""
 
-    client: ZoneMinder
+    client: ZoneMinderLegacyClient
     coordinator: ZmDataUpdateCoordinator
     monitors: list[Monitor]
     host_name: str

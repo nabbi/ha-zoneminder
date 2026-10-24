@@ -8,21 +8,22 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
 
+from aiozoneminder import Monitor, RunState, ZMApiError, ZMError, ZoneMinderLegacyClient
+from aiozoneminder.const import SERVER_ACTIONS
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_MONITORED_CONDITIONS
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from requests.exceptions import RequestException
-
-from zoneminder.exceptions import ZoneminderError
-from zoneminder.monitor import Monitor, MonitorState, TimePeriod
-from zoneminder.zm import ZoneMinder
 
 from .const import CONF_INCLUDE_ARCHIVED, DEFAULT_INCLUDE_ARCHIVED, DEFAULT_MONITORED_CONDITIONS
+from .monitor_state import MonitorState, TimePeriod, derive_function
 
 _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(seconds=30)
+
+# Alarm states zm-py's is_recording counted as recording (state >= ALARM).
+_RECORDING_ALARM_STATES = ("alarm", "alert")
 
 
 @dataclass
@@ -54,12 +55,13 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: ZoneMinder,
+        client: ZoneMinderLegacyClient,
         monitors: list[Monitor],
         host_name: str,
         config_entry: ConfigEntry | None = None,
         *,
         server_device_id: str,
+        zm_version: str | None = None,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -71,6 +73,7 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
         )
         self.zm_client = client
         self.zm_monitors = monitors
+        self.zm_version = zm_version
         # Registry id of the server's device, which monitor devices hang off.
         self.server_device_id = server_device_id
         self._event_queries: set[tuple[TimePeriod, bool]] = set()
@@ -87,49 +90,67 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
         """Register (TimePeriod, include_archived) pairs to fetch during refresh."""
         self._event_queries |= queries
 
-    async def _async_update_data(self) -> ZmData:
-        """Fetch data from ZoneMinder in one batched executor call."""
-        data: ZmData = await self.hass.async_add_executor_job(self._fetch_all_data)
-        return data
+    async def async_set_run_state(self, name: str) -> None:
+        """Switch ZoneMinder to a run state, or start, stop or restart it."""
+        if name in SERVER_ACTIONS:
+            await self.zm_client.server_control(name)
+        else:
+            # Only the name is sent (states/change/<name>).
+            await self.zm_client.set_run_state(
+                RunState(id=0, name=name, definition="", active=False)
+            )
 
-    def _fetch_all_data(self) -> ZmData:
-        """Fetch all data synchronously (runs in executor thread)."""
+    async def _async_is_recording(self, monitor_id: int) -> bool:
+        """Return True when the monitor is in alarm, as zm-py's is_recording did."""
+        try:
+            state = await self.zm_client.get_alarm_state(monitor_id)
+        except ZMApiError as err:
+            _LOGGER.debug("No alarm state for monitor %s: %s", monitor_id, err)
+            return False
+        return state in _RECORDING_ALARM_STATES
+
+    async def _async_update_data(self) -> ZmData:
+        """Fetch data from ZoneMinder."""
+        client = self.zm_client
         try:
             data = ZmData()
 
-            self.zm_client.update_all_monitors(self.zm_monitors)
-
-            # Pre-fetch event counts (1 API call per time period, not per monitor)
-            event_counts: dict[tuple[TimePeriod, bool], dict | None] = {}
-            for time_period, include_archived in self._event_queries:
-                event_counts[(time_period, include_archived)] = self.zm_client.get_event_counts(
-                    time_period, include_archived
-                )
+            # One request: the monitor list carries statuses and event summaries.
+            monitors = {monitor.id: monitor for monitor in await client.get_monitors()}
+            statuses = await client.get_monitor_statuses()
 
             for monitor in self.zm_monitors:
+                current = monitors.get(monitor.id, monitor)
+                status = statuses.get(monitor.id)
                 monitor_data = ZmMonitorData(
-                    function=monitor.function,
-                    is_recording=bool(monitor.is_recording),
-                    is_available=monitor.is_available,
-                    capturing=monitor.capturing,
-                    analysing=monitor.analysing,
-                    recording=monitor.recording,
+                    function=derive_function(
+                        current.capturing, current.analysing, current.recording
+                    ),
+                    is_recording=await self._async_is_recording(monitor.id),
+                    is_available=status is not None and status.connected,
+                    capturing=current.capturing,
+                    analysing=current.analysing,
+                    recording=current.recording,
                 )
                 for time_period, include_archived in self._event_queries:
-                    counts = event_counts.get((time_period, include_archived))
-                    if counts is not None:
-                        monitor_data.events[(time_period, include_archived)] = counts.get(
-                            str(monitor.id), 0
-                        )
-                    else:
-                        monitor_data.events[(time_period, include_archived)] = None
+                    summary = await client.get_event_summary(
+                        monitor.id, include_archived=include_archived
+                    )
+                    monitor_data.events[(time_period, include_archived)] = (
+                        getattr(summary, time_period.summary_field) if summary is not None else None
+                    )
                 data.monitors[monitor.id] = monitor_data
 
-            run_state_objs = self.zm_client.get_run_states()
+            try:
+                run_state_objs = await client.get_run_states()
+            except ZMApiError as err:
+                # A user without System view; zm-py returned no run states.
+                _LOGGER.debug("Run states unavailable: %s", err)
+                run_state_objs = []
             data.available_run_states = sorted(rs.name for rs in run_state_objs)
             data.run_state = next((rs.name for rs in run_state_objs if rs.active), None)
-            data.server_available = self.zm_client.is_available
+            data.server_available = (await client.get_server_info()).running is True
 
             return data
-        except (ZoneminderError, RequestException, KeyError) as err:
+        except ZMError as err:
             raise UpdateFailed(f"Error fetching ZoneMinder data: {err}") from err

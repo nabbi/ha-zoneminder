@@ -9,6 +9,7 @@ try:
     import probatio as vol
 except ImportError:  # Home Assistant before 2026.9 validates with voluptuous
     import voluptuous as vol  # type: ignore[no-redef]
+from aiozoneminder import ZMAuthenticationError, ZMError
 from homeassistant.config_entries import (
     ConfigFlow,
     ConfigFlowResult,
@@ -35,12 +36,8 @@ from homeassistant.helpers.selector import (
     TextSelectorConfig,
     TextSelectorType,
 )
-from requests.exceptions import RequestException
 
-from zoneminder.exceptions import LoginError, ZoneminderError
-from zoneminder.monitor import _is_zm_137_or_later
-from zoneminder.zm import ZoneMinder
-
+from .client import create_zm_client
 from .const import (
     CONF_INCLUDE_ARCHIVED,
     CONF_PATH_ZMS,
@@ -56,6 +53,7 @@ from .const import (
     DEFAULT_VERIFY_SSL,
     DOMAIN,
 )
+from .monitor_state import is_zm_137_or_later
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -181,32 +179,20 @@ class ZoneMinderConfigFlow(ConfigFlow, domain=DOMAIN):
         data: dict[str, Any],
     ) -> str | None:
         """Validate the user input allows us to connect. Returns error key or None."""
-        protocol = "https" if data.get(CONF_SSL, DEFAULT_SSL) else "http"
-        server_origin = f"{protocol}://{data[CONF_HOST]}"
-
-        zm_client = ZoneMinder(
-            server_origin,
-            data.get(CONF_USERNAME),
-            data.get(CONF_PASSWORD),
-            data.get(CONF_PATH, DEFAULT_PATH),
-            data.get(CONF_PATH_ZMS, DEFAULT_PATH_ZMS),
-            data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
-        )
-
+        zm_client = create_zm_client(self.hass, data)
         try:
-            result = await self.hass.async_add_executor_job(zm_client.login)
-        except LoginError as ex:
+            await zm_client.authenticate()
+        except ZMAuthenticationError as ex:
             _LOGGER.error("ZoneMinder login error: %s", ex)
             return "invalid_auth"
-        except (RequestException, ZoneminderError) as ex:
+        except ZMError as ex:
             _LOGGER.error("ZoneMinder connection error: %s", ex)
             return "cannot_connect"
         except Exception:
             _LOGGER.exception("Unexpected error connecting to ZoneMinder")
             return "unknown"
-
-        if not result:
-            return "invalid_auth"
+        finally:
+            await zm_client.close()
         return None
 
 
@@ -258,7 +244,7 @@ class ZoneMinderOptionsFlow(OptionsFlowWithConfigEntry):
 
         # command_on/command_off only apply to the legacy switch (pre-1.37 ZM).
         zm_version = self._get_zm_version()
-        if not _is_zm_137_or_later(zm_version):
+        if not is_zm_137_or_later(zm_version):
             schema_dict[
                 vol.Optional(
                     CONF_COMMAND_ON,
@@ -281,6 +267,6 @@ class ZoneMinderOptionsFlow(OptionsFlowWithConfigEntry):
         """Get the ZM version from the running integration, if available."""
         entry_data = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
         if entry_data is not None:
-            version: str | None = entry_data.coordinator.zm_client.zm_version
+            version: str | None = entry_data.coordinator.zm_version
             return version
         return None

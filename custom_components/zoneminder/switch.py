@@ -5,21 +5,19 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from aiozoneminder import Monitor, ZMError, function_fields
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from requests.exceptions import RequestException
-
-from zoneminder.exceptions import ZoneminderError
-from zoneminder.monitor import Monitor, MonitorState, _is_zm_137_or_later
 
 from .const import DEFAULT_COMMAND_OFF, DEFAULT_COMMAND_ON, DOMAIN
 from .coordinator import ZmDataUpdateCoordinator
 from .device import monitor_device_info
 from .models import ZmEntryData
+from .monitor_state import MonitorState, is_zm_137_or_later
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,7 +59,7 @@ async def async_setup_entry(
 
     # On ZM 1.37+, the three select entities (Capturing/Analysing/Recording)
     # replace the legacy Function switch — so skip function switches.
-    if not _is_zm_137_or_later(entry_data.coordinator.zm_client.zm_version):
+    if not is_zm_137_or_later(entry_data.coordinator.zm_version):
         on_state = MonitorState(entry.options.get(CONF_COMMAND_ON, DEFAULT_COMMAND_ON))
         off_state = MonitorState(entry.options.get(CONF_COMMAND_OFF, DEFAULT_COMMAND_OFF))
 
@@ -108,19 +106,22 @@ class ZMSwitchMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntity)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the entity on."""
-        await self.hass.async_add_executor_job(self._set_function, self._on_state)
+        await self._async_set_function(self._on_state)
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the entity off."""
-        await self.hass.async_add_executor_job(self._set_function, self._off_state)
+        await self._async_set_function(self._off_state)
         await self.coordinator.async_request_refresh()
 
-    def _set_function(self, state: MonitorState) -> None:
-        """Set monitor function (runs in executor)."""
+    async def _async_set_function(self, state: MonitorState) -> None:
+        """Set monitor function."""
+        capturing, analysing, recording = function_fields(state.value)
         try:
-            self._monitor.function = state
-        except (ZoneminderError, RequestException, KeyError) as err:
+            await self.coordinator.zm_client.set_monitor_state(
+                self._monitor.id, capturing=capturing, analysing=analysing, recording=recording
+            )
+        except ZMError as err:
             _LOGGER.error(
                 "Error setting monitor %s function to %s: %s",
                 self._monitor.name,
@@ -158,19 +159,24 @@ class ZMSwitchForceAlarm(CoordinatorEntity[ZmDataUpdateCoordinator], SwitchEntit
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Force the monitor into alarm state."""
-        await self.hass.async_add_executor_job(self._set_force_alarm, True)
+        await self._async_set_force_alarm(True)
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Cancel forced alarm on the monitor."""
-        await self.hass.async_add_executor_job(self._set_force_alarm, False)
+        await self._async_set_force_alarm(False)
         await self.coordinator.async_request_refresh()
 
-    def _set_force_alarm(self, state: bool) -> None:
-        """Set force alarm state (runs in executor)."""
+    async def _async_set_force_alarm(self, state: bool) -> None:
+        """Set force alarm state."""
+        client = self.coordinator.zm_client
         try:
-            self._monitor.set_force_alarm_state(state)
-        except (ZoneminderError, RequestException) as err:
+            if state:
+                # API v2 runs zmu -a, which records "Forced Web" whatever the cause.
+                await client.trigger_alarm(self._monitor.id, "Home Assistant")
+            else:
+                await client.cancel_alarm(self._monitor.id)
+        except ZMError as err:
             _LOGGER.error(
                 "Error setting force alarm %s for monitor %s: %s",
                 "on" if state else "off",

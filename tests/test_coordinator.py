@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from unittest.mock import call
 
+from aiozoneminder import ZMApiError, ZMConnectionError
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from requests.exceptions import Timeout
-from zoneminder.exceptions import ZoneminderError
-from zoneminder.monitor import TimePeriod
 
 from custom_components.zoneminder.const import DOMAIN
+from custom_components.zoneminder.monitor_state import MonitorState, TimePeriod
 
 from .conftest import create_mock_monitor, setup_entry
 
@@ -25,24 +24,55 @@ async def _setup_and_get_coordinator(hass: HomeAssistant, entry: MockConfigEntry
 async def test_update_failed_on_zoneminder_error(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """ZoneminderError during update should raise UpdateFailed."""
+    """ZMApiError during update should raise UpdateFailed."""
     monitors = [create_mock_monitor()]
     coordinator, client = await _setup_and_get_coordinator(hass, mock_config_entry, monitors)
 
-    client.get_run_states.side_effect = ZoneminderError("API down")
+    client.get_monitors.side_effect = ZMApiError("api/monitors.json returned 500")
     await coordinator.async_refresh()
 
     assert coordinator.last_update_success is False
 
 
-async def test_update_failed_on_key_error(
+async def test_run_states_refused_reads_as_none(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """KeyError from malformed API response should raise UpdateFailed."""
+    """A refused run state list (no System view) is no run states, as zm-py returned."""
     monitors = [create_mock_monitor()]
     coordinator, client = await _setup_and_get_coordinator(hass, mock_config_entry, monitors)
 
-    client.update_all_monitors.side_effect = KeyError("missing key")
+    client.get_run_states.side_effect = ZMApiError("api/states.json was refused")
+    await coordinator.async_refresh()
+
+    assert coordinator.last_update_success is True
+    assert coordinator.data.available_run_states == []
+    assert coordinator.data.run_state is None
+
+
+async def test_alarm_state_error_reads_as_not_recording(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """A failed alarm status read is not recording, as zm-py's is_recording returned."""
+    monitors = [create_mock_monitor(is_recording=True)]
+    coordinator, client = await _setup_and_get_coordinator(hass, mock_config_entry, monitors)
+
+    client.get_alarm_state.side_effect = ZMApiError("alarm status returned 500")
+    await coordinator.async_refresh()
+
+    assert coordinator.last_update_success is True
+    assert coordinator.data.monitors[1].is_recording is False
+
+
+async def test_update_failed_on_key_error(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """A response aiozoneminder can't use should raise UpdateFailed."""
+    monitors = [create_mock_monitor()]
+    coordinator, client = await _setup_and_get_coordinator(hass, mock_config_entry, monitors)
+
+    client.get_monitors.side_effect = ZMApiError(
+        "api/monitors.json returned a page that is not JSON"
+    )
     await coordinator.async_refresh()
 
     assert coordinator.last_update_success is False
@@ -51,11 +81,11 @@ async def test_update_failed_on_key_error(
 async def test_update_failed_on_request_timeout(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """requests.Timeout during update should raise UpdateFailed."""
+    """A timeout during update should raise UpdateFailed."""
     monitors = [create_mock_monitor()]
     coordinator, client = await _setup_and_get_coordinator(hass, mock_config_entry, monitors)
 
-    client.get_run_states.side_effect = Timeout("connection timed out")
+    client.get_run_states.side_effect = ZMConnectionError("connection timed out")
     await coordinator.async_refresh()
 
     assert coordinator.last_update_success is False
@@ -69,12 +99,12 @@ async def test_coordinator_recovers_after_failure(
     coordinator, client = await _setup_and_get_coordinator(hass, mock_config_entry, monitors)
 
     # First poll fails
-    client.get_run_states.side_effect = ZoneminderError("temporary failure")
+    client.get_monitors.side_effect = ZMConnectionError("temporary failure")
     await coordinator.async_refresh()
     assert coordinator.last_update_success is False
 
     # Next poll succeeds
-    client.get_run_states.side_effect = None
+    client.get_monitors.side_effect = lambda: []
     await coordinator.async_refresh()
     assert coordinator.last_update_success is True
 
@@ -82,16 +112,17 @@ async def test_coordinator_recovers_after_failure(
 async def test_bulk_update_monitors_called(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Coordinator should call update_all_monitors() with the monitors list."""
+    """Each refresh lists the monitors once, for every monitor's state."""
     monitors = [create_mock_monitor(monitor_id=1), create_mock_monitor(monitor_id=2, name="Yard")]
     coordinator, client = await _setup_and_get_coordinator(hass, mock_config_entry, monitors)
 
     # Reset call counts from initial setup refresh
-    client.update_all_monitors.reset_mock()
+    client.get_monitors.reset_mock()
 
     await coordinator.async_refresh()
 
-    client.update_all_monitors.assert_called_once_with(monitors)
+    client.get_monitors.assert_awaited_once_with()
+    assert set(coordinator.data.monitors) == {1, 2}
 
 
 async def test_coordinator_populates_new_monitor_fields(
@@ -116,13 +147,14 @@ async def test_coordinator_populates_new_monitor_fields(
     assert md.recording == "OnMotion"
 
 
-async def test_coordinator_new_fields_none_on_old_zm(
+async def test_coordinator_fields_from_function_on_old_zm(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Coordinator should store None for new fields on pre-1.37 ZM."""
+    """On pre-1.37 ZM aiozoneminder expands Function into the three fields."""
     monitors = [
         create_mock_monitor(
             monitor_id=1,
+            function=MonitorState.MODECT,
             capturing=None,
             analysing=None,
             recording=None,
@@ -133,15 +165,14 @@ async def test_coordinator_new_fields_none_on_old_zm(
     await coordinator.async_refresh()
 
     md = coordinator.data.monitors[1]
-    assert md.capturing is None
-    assert md.analysing is None
-    assert md.recording is None
+    assert (md.capturing, md.analysing, md.recording) == ("Always", "Always", "OnMotion")
+    assert md.function is MonitorState.MODECT
 
 
 async def test_event_counts_prefetched_once_per_period(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Event counts should be fetched once per time period, not per monitor."""
+    """Event counts come per monitor from the monitor list aiozoneminder already has."""
     monitors = [
         create_mock_monitor(monitor_id=1),
         create_mock_monitor(monitor_id=2, name="Yard"),
@@ -157,12 +188,14 @@ async def test_event_counts_prefetched_once_per_period(
         }
     )
 
-    client.get_event_counts.reset_mock()
+    client.get_event_summary.reset_mock()
+    client.get_monitors.reset_mock()
     await coordinator.async_refresh()
 
-    # Should be called exactly once per (TimePeriod, include_archived) pair
-    assert client.get_event_counts.call_count == 2
-    client.get_event_counts.assert_has_calls(
-        [call(TimePeriod.ALL, False), call(TimePeriod.HOUR, False)],
-        any_order=True,
+    # One summary per monitor and query, served from the one monitor list.
+    assert client.get_monitors.await_count == 1
+    assert client.get_event_summary.await_count == 6
+    client.get_event_summary.assert_has_awaits(
+        [call(m, include_archived=False) for m in (1, 2, 3)], any_order=True
     )
+    assert coordinator.data.monitors[2].events[(TimePeriod.HOUR, False)] == 5

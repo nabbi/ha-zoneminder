@@ -30,11 +30,11 @@ def mock_zm_patch():
     client = create_mock_zm_client()
     with (
         patch(
-            "custom_components.zoneminder.config_flow.ZoneMinder",
+            "custom_components.zoneminder.config_flow.create_zm_client",
             return_value=client,
         ) as mock_flow,
         patch(
-            "custom_components.zoneminder.ZoneMinder",
+            "custom_components.zoneminder.create_zm_client",
             return_value=client,
         ) as mock_init,
     ):

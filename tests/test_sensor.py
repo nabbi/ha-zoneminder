@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from unittest.mock import MagicMock
 
 import pytest
 from homeassistant.const import CONF_MONITORED_CONDITIONS, STATE_UNAVAILABLE
@@ -11,9 +10,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
-from zoneminder.monitor import Monitor, MonitorState, TimePeriod
 
 from custom_components.zoneminder.const import CONF_INCLUDE_ARCHIVED
+from custom_components.zoneminder.monitor_state import MonitorState, TimePeriod
 
 from .conftest import create_mock_monitor, setup_entry
 
@@ -475,7 +474,7 @@ async def test_default_conditions_only_all(
 async def test_include_archived_flag(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test include_archived flag is passed correctly to get_event_counts."""
+    """Test include_archived flag is passed correctly to get_event_summary."""
     monitors = [create_mock_monitor(name="Cam")]
     entry = _entry_with_sensor_options(
         mock_config_entry, include_archived=True, monitored_conditions=["all"]
@@ -485,8 +484,7 @@ async def test_include_archived_flag(
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60), fire_all=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    # Verify get_event_counts was called with include_archived=True
-    client.get_event_counts.assert_any_call(TimePeriod.ALL, True)
+    client.get_event_summary.assert_any_await(1, include_archived=True)
 
 
 async def test_sensor_unique_id(
@@ -501,35 +499,3 @@ async def test_sensor_unique_id(
     entry = entity_registry.async_get("sensor.front_door_status")
     assert entry is not None
     assert entry.unique_id is not None
-
-
-async def test_function_property_no_side_effects(hass: HomeAssistant) -> None:
-    """Reading monitor.function should not trigger an HTTP request.
-
-    BUG-03 resolved: Monitor.function is now a pure read from _raw_result.
-    The coordinator calls update_monitor() explicitly once per poll cycle.
-    This test verifies the property getter makes zero API calls.
-    """
-    stub_client = MagicMock()
-    stub_client.verify_ssl = True
-
-    raw_result = {
-        "Monitor": {
-            "Id": "1",
-            "Name": "Test",
-            "Function": "Modect",
-            "Controllable": "0",
-            "StreamReplayBuffer": "0",
-            "ServerId": "0",
-        },
-        "Monitor_Status": {"CaptureFPS": "15.00"},
-    }
-    stub_client.get_zms_url_for_monitor.return_value = "http://example.com/zms"
-    stub_client.get_url_with_auth.return_value = "http://example.com/zms?auth=1"
-
-    monitor = Monitor(stub_client, raw_result)
-    stub_client.get_state.reset_mock()
-
-    # Reading function should NOT make an HTTP call (constructor data is cached)
-    _ = monitor.function
-    assert stub_client.get_state.call_count == 0

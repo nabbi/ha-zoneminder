@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from unittest.mock import MagicMock
 
 import pytest
+from aiozoneminder import ZMApiError, ZMConnectionError
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -18,9 +18,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
-from requests.exceptions import Timeout
-from zoneminder.exceptions import ZoneminderError
-from zoneminder.monitor import Monitor, MonitorState
+
+from custom_components.zoneminder.monitor_state import MonitorState
 
 from .conftest import create_mock_monitor, setup_entry
 
@@ -167,11 +166,11 @@ async def test_switch_unique_id(
 async def test_turn_on_api_error_logged(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """ZoneminderError during turn_on should be caught and logged."""
+    """ZMApiError during turn_on should be caught and logged."""
     monitors = [create_mock_monitor(name="Front Door", function=MonitorState.MONITOR)]
 
     def raise_on_set(self, value):
-        raise ZoneminderError("API error")
+        raise ZMApiError("API error")
 
     monitors[0].configure_mock(**{"function": MonitorState.MONITOR})
     type(monitors[0]).function = property(lambda self: MonitorState.MONITOR, raise_on_set)
@@ -196,7 +195,7 @@ async def test_turn_off_request_timeout_logged(
     monitors = [create_mock_monitor(name="Front Door", function=MonitorState.MODECT)]
 
     def raise_on_set(self, value):
-        raise Timeout("connection timed out")
+        raise ZMConnectionError("connection timed out")
 
     type(monitors[0]).function = property(lambda self: MonitorState.MODECT, raise_on_set)
 
@@ -287,9 +286,9 @@ async def test_force_alarm_switch_off_when_not_recording(
 async def test_force_alarm_turn_on_calls_api(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test turn_on calls set_force_alarm_state(True)."""
+    """Test turn_on forces an alarm."""
     monitors = [create_mock_monitor(name="Front Door", is_recording=False)]
-    await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
 
     await hass.services.async_call(
         SWITCH_DOMAIN,
@@ -299,15 +298,16 @@ async def test_force_alarm_turn_on_calls_api(
     )
     await hass.async_block_till_done()
 
-    monitors[0].set_force_alarm_state.assert_called_once_with(True)
+    client.trigger_alarm.assert_awaited_once_with(1, "Home Assistant")
+    client.cancel_alarm.assert_not_awaited()
 
 
 async def test_force_alarm_turn_off_calls_api(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test turn_off calls set_force_alarm_state(False)."""
+    """Test turn_off cancels the forced alarm."""
     monitors = [create_mock_monitor(name="Front Door", is_recording=True)]
-    await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
 
     await hass.services.async_call(
         SWITCH_DOMAIN,
@@ -317,16 +317,17 @@ async def test_force_alarm_turn_off_calls_api(
     )
     await hass.async_block_till_done()
 
-    monitors[0].set_force_alarm_state.assert_called_once_with(False)
+    client.cancel_alarm.assert_awaited_once_with(1)
+    client.trigger_alarm.assert_not_awaited()
 
 
 async def test_force_alarm_api_error_logged(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """ZoneminderError during force alarm should be caught and logged."""
+    """ZMApiError during force alarm should be caught and logged."""
     monitors = [create_mock_monitor(name="Front Door", is_recording=False)]
-    monitors[0].set_force_alarm_state.side_effect = ZoneminderError("API error")
-    await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
+    client.trigger_alarm.side_effect = ZMApiError("zmu exit 255")
 
     await hass.services.async_call(
         SWITCH_DOMAIN,
@@ -377,10 +378,10 @@ async def test_force_alarm_created_on_zm_137(
 async def test_force_alarm_request_timeout_logged(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """requests.Timeout during force alarm should be caught and logged."""
+    """A timeout during force alarm should be caught and logged."""
     monitors = [create_mock_monitor(name="Front Door", is_recording=False)]
-    monitors[0].set_force_alarm_state.side_effect = Timeout("connection timed out")
-    await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors, zm_version="1.36.33")
+    client.trigger_alarm.side_effect = ZMConnectionError("connection timed out")
 
     await hass.services.async_call(
         SWITCH_DOMAIN,
@@ -391,35 +392,3 @@ async def test_force_alarm_request_timeout_logged(
     await hass.async_block_till_done()
 
     assert "Error setting force alarm" in caplog.text
-
-
-async def test_function_read_no_side_effects(hass: HomeAssistant) -> None:
-    """Reading monitor.function should not trigger an HTTP request.
-
-    BUG-03 resolved: Monitor.function is now a pure read from _raw_result.
-    The coordinator calls update_monitor() explicitly once per poll cycle.
-    This test verifies the property getter makes zero API calls.
-    """
-    stub_client = MagicMock()
-    stub_client.verify_ssl = True
-
-    raw_result = {
-        "Monitor": {
-            "Id": "1",
-            "Name": "Test",
-            "Function": "Modect",
-            "Controllable": "0",
-            "StreamReplayBuffer": "0",
-            "ServerId": "0",
-        },
-        "Monitor_Status": {"CaptureFPS": "15.00"},
-    }
-    stub_client.get_zms_url_for_monitor.return_value = "http://example.com/zms"
-    stub_client.get_url_with_auth.return_value = "http://example.com/zms?auth=1"
-
-    monitor = Monitor(stub_client, raw_result)
-    stub_client.get_state.reset_mock()
-
-    # Reading function should NOT make an HTTP call (constructor data is cached)
-    _ = monitor.function
-    assert stub_client.get_state.call_count == 0

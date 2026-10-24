@@ -4,20 +4,18 @@ from __future__ import annotations
 
 import logging
 
+from aiozoneminder import Monitor, ZMError, function_fields
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from requests.exceptions import RequestException
-
-from zoneminder.exceptions import ZoneminderError
-from zoneminder.monitor import Monitor, MonitorState, _derive_function, _is_zm_137_or_later
 
 from .const import DOMAIN
 from .coordinator import ZmData, ZmDataUpdateCoordinator
 from .device import monitor_device_info, server_device_info
 from .models import ZmEntryData
+from .monitor_state import MonitorState, derive_function, is_zm_137_or_later
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,7 +43,7 @@ async def async_setup_entry(
     for monitor in entry_data.monitors:
         entities.append(ZMSelectFunction(coordinator, monitor, host_name))
 
-    if _is_zm_137_or_later(coordinator.zm_client.zm_version):
+    if is_zm_137_or_later(coordinator.zm_version):
         for monitor in entry_data.monitors:
             entities.append(ZMSelectCapturing(coordinator, monitor, host_name))
             entities.append(ZMSelectAnalysing(coordinator, monitor, host_name))
@@ -64,7 +62,7 @@ class ZMSelectRunState(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity)
         """Initialize run state select."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{host_name}_run_state_select"
-        self._attr_device_info = server_device_info(host_name, coordinator.zm_client.zm_version)
+        self._attr_device_info = server_device_info(host_name, coordinator.zm_version)
 
     @property
     def available(self) -> bool:
@@ -97,7 +95,7 @@ class ZMSelectRunState(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity)
 
     async def async_select_option(self, option: str) -> None:
         """Change the ZoneMinder run state."""
-        await self.hass.async_add_executor_job(self.coordinator.zm_client.set_active_state, option)
+        await self.coordinator.async_set_run_state(option)
         await self.coordinator.async_request_refresh()
 
 
@@ -140,7 +138,7 @@ class ZMSelectFunction(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity)
         data: ZmData | None = self.coordinator.data
         if data is not None and (md := data.monitors.get(self._monitor.id)):
             if md.capturing is not None and md.analysing is not None and md.recording is not None:
-                derived = _derive_function(md.capturing, md.analysing, md.recording)
+                derived = derive_function(md.capturing, md.analysing, md.recording)
                 if derived is not None:
                     return str(derived.value)
                 return "Custom"
@@ -152,14 +150,17 @@ class ZMSelectFunction(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity)
         """Change the monitor function."""
         if option == "Custom":
             return
-        await self.hass.async_add_executor_job(self._set_function, option)
+        await self._async_set_function(option)
         await self.coordinator.async_request_refresh()
 
-    def _set_function(self, value: str) -> None:
-        """Set monitor function (runs in executor)."""
+    async def _async_set_function(self, value: str) -> None:
+        """Set monitor function."""
+        capturing, analysing, recording = function_fields(value)
         try:
-            self._monitor.function = MonitorState(value)
-        except (ZoneminderError, RequestException, KeyError) as err:
+            await self.coordinator.zm_client.set_monitor_state(
+                self._monitor.id, capturing=capturing, analysing=analysing, recording=recording
+            )
+        except ZMError as err:
             _LOGGER.error(
                 "Error setting monitor %s Function to %s: %s",
                 self._monitor.name,
@@ -195,14 +196,14 @@ class ZMSelectCapturing(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity
 
     async def async_select_option(self, option: str) -> None:
         """Change the Capturing field."""
-        await self.hass.async_add_executor_job(self._set_capturing, option)
+        await self._async_set_capturing(option)
         await self.coordinator.async_request_refresh()
 
-    def _set_capturing(self, value: str) -> None:
-        """Set monitor capturing (runs in executor)."""
+    async def _async_set_capturing(self, value: str) -> None:
+        """Set monitor capturing."""
         try:
-            self._monitor.capturing = value
-        except (ZoneminderError, RequestException, KeyError) as err:
+            await self.coordinator.zm_client.set_monitor_state(self._monitor.id, capturing=value)
+        except ZMError as err:
             _LOGGER.error(
                 "Error setting monitor %s Capturing to %s: %s",
                 self._monitor.name,
@@ -238,14 +239,14 @@ class ZMSelectAnalysing(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity
 
     async def async_select_option(self, option: str) -> None:
         """Change the Analysing field."""
-        await self.hass.async_add_executor_job(self._set_analysing, option)
+        await self._async_set_analysing(option)
         await self.coordinator.async_request_refresh()
 
-    def _set_analysing(self, value: str) -> None:
-        """Set monitor analysing (runs in executor)."""
+    async def _async_set_analysing(self, value: str) -> None:
+        """Set monitor analysing."""
         try:
-            self._monitor.analysing = value
-        except (ZoneminderError, RequestException, KeyError) as err:
+            await self.coordinator.zm_client.set_monitor_state(self._monitor.id, analysing=value)
+        except ZMError as err:
             _LOGGER.error(
                 "Error setting monitor %s Analysing to %s: %s",
                 self._monitor.name,
@@ -281,14 +282,14 @@ class ZMSelectRecording(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity
 
     async def async_select_option(self, option: str) -> None:
         """Change the Recording field."""
-        await self.hass.async_add_executor_job(self._set_recording, option)
+        await self._async_set_recording(option)
         await self.coordinator.async_request_refresh()
 
-    def _set_recording(self, value: str) -> None:
-        """Set monitor recording (runs in executor)."""
+    async def _async_set_recording(self, value: str) -> None:
+        """Set monitor recording."""
         try:
-            self._monitor.recording = value
-        except (ZoneminderError, RequestException, KeyError) as err:
+            await self.coordinator.zm_client.set_monitor_state(self._monitor.id, recording=value)
+        except ZMError as err:
             _LOGGER.error(
                 "Error setting monitor %s Recording to %s: %s",
                 self._monitor.name,

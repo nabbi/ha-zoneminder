@@ -8,9 +8,12 @@ try:
     import probatio as vol
 except ImportError:  # Home Assistant before 2026.9 validates with voluptuous
     import voluptuous as vol  # type: ignore[no-redef]
+from aiohttp import web
+from aiozoneminder import Monitor, ZMError, ZoneMinderLegacyClient
 from homeassistant.components.camera import CameraEntityFeature
 from homeassistant.components.mjpeg import MjpegCamera, filter_urllib3_logging
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_platform
@@ -18,10 +21,15 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from zoneminder.exceptions import ZoneminderError
-from zoneminder.monitor import Monitor
-
-from .const import ATTR_DIRECTION, ATTR_PRESET, DOMAIN, SERVICE_PTZ, SERVICE_PTZ_PRESET, SUPPORT_PTZ
+from .const import (
+    ATTR_DIRECTION,
+    ATTR_PRESET,
+    DEFAULT_VERIFY_SSL,
+    DOMAIN,
+    SERVICE_PTZ,
+    SERVICE_PTZ_PRESET,
+    SUPPORT_PTZ,
+)
 from .coordinator import ZmDataUpdateCoordinator
 from .device import monitor_device_info
 from .models import ZmEntryData
@@ -70,7 +78,7 @@ async def async_setup_entry(
             ZoneMinderCamera(
                 entry_data.coordinator,
                 monitor,
-                entry_data.client.verify_ssl,
+                entry.data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
                 entry_data.host_name,
             )
         )
@@ -106,8 +114,9 @@ class ZoneMinderCamera(CoordinatorEntity[ZmDataUpdateCoordinator], MjpegCamera):
         MjpegCamera.__init__(
             self,
             name=monitor.name,
-            mjpeg_url=monitor.mjpeg_image_url,
-            still_image_url=monitor.still_image_url,
+            # Built again for each stream: it carries the API token, which expires.
+            mjpeg_url=coordinator.zm_client.get_stream_url(monitor.id),
+            still_image_url=None,
             verify_ssl=verify_ssl,
         )
         self._monitor = monitor
@@ -117,6 +126,26 @@ class ZoneMinderCamera(CoordinatorEntity[ZmDataUpdateCoordinator], MjpegCamera):
         self._attr_device_info = monitor_device_info(
             host_name, monitor, coordinator.server_device_id
         )
+
+    @property
+    def _zm_client(self) -> ZoneMinderLegacyClient:
+        return self.coordinator.zm_client
+
+    async def stream_source(self) -> str:
+        """Return the MJPEG URL, with a current token."""
+        self._mjpeg_url = self._zm_client.get_stream_url(self._monitor.id)
+        return await super().stream_source()
+
+    async def handle_async_mjpeg_stream(self, request: web.Request) -> web.StreamResponse | None:
+        """Proxy the MJPEG stream, with a current token."""
+        self._mjpeg_url = self._zm_client.get_stream_url(self._monitor.id)
+        return await super().handle_async_mjpeg_stream(request)
+
+    async def async_camera_image(
+        self, width: int | None = None, height: int | None = None
+    ) -> bytes | None:
+        """Return a still image from ZMS."""
+        return await self._zm_client.async_get_snapshot(self._monitor.id)
 
     @property
     def is_recording(self) -> bool:
@@ -137,32 +166,19 @@ class ZoneMinderCamera(CoordinatorEntity[ZmDataUpdateCoordinator], MjpegCamera):
     async def async_perform_ptz(self, direction: str) -> None:
         """Move PTZ camera in the specified direction."""
         try:
-            result = await self.hass.async_add_executor_job(
-                self.coordinator.zm_client.move_monitor, self._monitor, direction
-            )
-        except ZoneminderError as err:
+            # aiozoneminder spells directions up-left where the service takes up_left.
+            await self._zm_client.ptz(self._monitor.id, direction.replace("_", "-"))
+        except ZMError as err:
             raise HomeAssistantError(f"Failed to move camera {self._monitor.name}: {err}") from err
-
-        if not result:
-            raise HomeAssistantError(f"Failed to move camera {self._monitor.name} to {direction}")
 
     async def async_perform_ptz_preset(self, preset: int) -> None:
         """Move PTZ camera to a preset position (0 = home)."""
         try:
             if preset == 0:
-                result = await self.hass.async_add_executor_job(
-                    self.coordinator.zm_client.goto_home, self._monitor
-                )
+                await self._zm_client.ptz(self._monitor.id, "home")
             else:
-                result = await self.hass.async_add_executor_job(
-                    self.coordinator.zm_client.goto_preset, self._monitor, preset
-                )
-        except ZoneminderError as err:
+                await self._zm_client.ptz(self._monitor.id, "preset", preset=preset)
+        except ZMError as err:
             raise HomeAssistantError(
                 f"Failed to move camera {self._monitor.name} to preset {preset}: {err}"
             ) from err
-
-        if not result:
-            raise HomeAssistantError(
-                f"Failed to move camera {self._monitor.name} to preset {preset}"
-            )

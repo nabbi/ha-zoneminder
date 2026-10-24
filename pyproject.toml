@@ -7,23 +7,23 @@ packages = ["custom_components"]
 
 [project]
 name = "ha-zoneminder"
-version = "0.1.5"
+version = "0.2.0"
 description = "ZoneMinder custom integration for Home Assistant"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.13"
 dependencies = [
     "homeassistant",
-    "zm-py==0.5.7",
+    "aiozoneminder @ git+https://github.com/nabbi/aiozoneminder@dba18398ba0e14133802d1a4664d44b250c86bfb",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest-homeassistant-custom-component",
+    "zm-py==0.5.7",  # tests/e2e reads the server through zm-py, independent of the integration
     "PyTurboJPEG",
     "ruff",
     "mypy",
-    "types-requests",
     "tox",
     "tox-gh-actions",
 ]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from aiozoneminder import ZMAuthenticationError, ZMConnectionError
 from homeassistant import config_entries
 from homeassistant.const import (
     CONF_HOST,
@@ -17,8 +18,6 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from requests.exceptions import ConnectionError as RequestsConnectionError
-from zoneminder.exceptions import LoginError
 
 from custom_components.zoneminder.const import (
     CONF_INCLUDE_ARCHIVED,
@@ -59,7 +58,7 @@ async def test_user_flow_success(hass: HomeAssistant) -> None:
 
     client = create_mock_zm_client()
     with patch(
-        "custom_components.zoneminder.config_flow.ZoneMinder",
+        "custom_components.zoneminder.config_flow.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -84,9 +83,9 @@ async def test_user_flow_cannot_connect(hass: HomeAssistant) -> None:
     )
 
     client = create_mock_zm_client()
-    client.login.side_effect = RequestsConnectionError("Connection refused")
+    client.authenticate.side_effect = ZMConnectionError("Connection refused")
     with patch(
-        "custom_components.zoneminder.config_flow.ZoneMinder",
+        "custom_components.zoneminder.config_flow.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -106,7 +105,7 @@ async def test_user_flow_invalid_auth(hass: HomeAssistant) -> None:
 
     client = create_mock_zm_client(login_success=False)
     with patch(
-        "custom_components.zoneminder.config_flow.ZoneMinder",
+        "custom_components.zoneminder.config_flow.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -125,9 +124,9 @@ async def test_user_flow_login_error_exception(hass: HomeAssistant) -> None:
     )
 
     client = create_mock_zm_client()
-    client.login.side_effect = LoginError("Invalid credentials")
+    client.authenticate.side_effect = ZMAuthenticationError("Invalid credentials")
     with patch(
-        "custom_components.zoneminder.config_flow.ZoneMinder",
+        "custom_components.zoneminder.config_flow.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -146,9 +145,9 @@ async def test_user_flow_unknown_error(hass: HomeAssistant) -> None:
     )
 
     client = create_mock_zm_client()
-    client.login.side_effect = RuntimeError("Something unexpected")
+    client.authenticate.side_effect = RuntimeError("Something unexpected")
     with patch(
-        "custom_components.zoneminder.config_flow.ZoneMinder",
+        "custom_components.zoneminder.config_flow.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -176,7 +175,7 @@ async def test_user_flow_duplicate_host(hass: HomeAssistant) -> None:
 
     client = create_mock_zm_client()
     with patch(
-        "custom_components.zoneminder.config_flow.ZoneMinder",
+        "custom_components.zoneminder.config_flow.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -205,7 +204,7 @@ async def test_import_flow_success(hass: HomeAssistant) -> None:
 
     client = create_mock_zm_client()
     with patch(
-        "custom_components.zoneminder.config_flow.ZoneMinder",
+        "custom_components.zoneminder.config_flow.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.flow.async_init(
@@ -243,9 +242,9 @@ async def test_import_flow_already_imported(hass: HomeAssistant) -> None:
 async def test_import_flow_connection_error(hass: HomeAssistant) -> None:
     """Test import flow aborts on connection error."""
     client = create_mock_zm_client()
-    client.login.side_effect = RequestsConnectionError("Connection refused")
+    client.authenticate.side_effect = ZMConnectionError("Connection refused")
     with patch(
-        "custom_components.zoneminder.config_flow.ZoneMinder",
+        "custom_components.zoneminder.config_flow.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.flow.async_init(
@@ -280,7 +279,7 @@ async def test_reconfigure_flow_success(hass: HomeAssistant, mock_config_entry) 
 
     client = create_mock_zm_client()
     with patch(
-        "custom_components.zoneminder.config_flow.ZoneMinder",
+        "custom_components.zoneminder.config_flow.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -302,9 +301,9 @@ async def test_reconfigure_flow_invalid_auth(hass: HomeAssistant, mock_config_en
     result = await mock_config_entry.start_reconfigure_flow(hass)
 
     client = create_mock_zm_client()
-    client.login.side_effect = LoginError("Invalid credentials")
+    client.authenticate.side_effect = ZMAuthenticationError("Invalid credentials")
     with patch(
-        "custom_components.zoneminder.config_flow.ZoneMinder",
+        "custom_components.zoneminder.config_flow.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -324,9 +323,9 @@ async def test_reconfigure_flow_cannot_connect(hass: HomeAssistant, mock_config_
     result = await mock_config_entry.start_reconfigure_flow(hass)
 
     client = create_mock_zm_client()
-    client.login.side_effect = RequestsConnectionError("Connection refused")
+    client.authenticate.side_effect = ZMConnectionError("Connection refused")
     with patch(
-        "custom_components.zoneminder.config_flow.ZoneMinder",
+        "custom_components.zoneminder.config_flow.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -348,7 +347,7 @@ async def test_options_flow_defaults(hass: HomeAssistant, mock_config_entry) -> 
 
     client = create_mock_zm_client()
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -366,7 +365,7 @@ async def test_options_flow_update(hass: HomeAssistant, mock_config_entry) -> No
 
     client = create_mock_zm_client()
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -375,7 +374,7 @@ async def test_options_flow_update(hass: HomeAssistant, mock_config_entry) -> No
     result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
 
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.options.async_configure(
@@ -398,7 +397,7 @@ async def test_options_flow_shows_command_on_pre137(hass: HomeAssistant, mock_co
 
     client = create_mock_zm_client(zm_version="1.36.33")
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -407,7 +406,7 @@ async def test_options_flow_shows_command_on_pre137(hass: HomeAssistant, mock_co
     result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
 
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.options.async_configure(
@@ -432,7 +431,7 @@ async def test_options_flow_stream_scale_maxfps(hass: HomeAssistant, mock_config
 
     client = create_mock_zm_client()
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -441,7 +440,7 @@ async def test_options_flow_stream_scale_maxfps(hass: HomeAssistant, mock_config
     result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
 
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.options.async_configure(
@@ -466,7 +465,7 @@ async def test_options_flow_stream_params_unset(hass: HomeAssistant, mock_config
 
     client = create_mock_zm_client()
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -475,7 +474,7 @@ async def test_options_flow_stream_params_unset(hass: HomeAssistant, mock_config
     result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
 
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         result = await hass.config_entries.options.async_configure(
