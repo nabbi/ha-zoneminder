@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 try:
@@ -95,6 +96,15 @@ USER_DATA_SCHEMA = vol.Schema(
 
 # When no API connects, report the most telling failure.
 _ERROR_RANK = ["unknown", "cannot_connect"]
+
+REAUTH_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_USERNAME): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
+        vol.Optional(CONF_PASSWORD): TextSelector(
+            TextSelectorConfig(type=TextSelectorType.PASSWORD)
+        ),
+    }
+)
 
 CONF_COMMAND_ON = "command_on"
 CONF_COMMAND_OFF = "command_off"
@@ -193,6 +203,33 @@ class ZoneMinderConfigFlow(ConfigFlow, domain=DOMAIN):
                 USER_DATA_SCHEMA,
                 user_input or self._get_reconfigure_entry().data,
             ),
+            errors=errors,
+        )
+
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
+        """ZoneMinder refused the stored login: ask for it again."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> ConfigFlowResult:
+        """Check the new username and password, then reload the entry."""
+        errors: dict[str, str] = {}
+        entry = self._get_reauth_entry()
+
+        if user_input is not None:
+            error, data = await self._async_validate_connection({**entry.data, **user_input})
+            if error is None:
+                return self.async_update_reload_and_abort(entry, data=data)
+            errors["base"] = error
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=self.add_suggested_values_to_schema(
+                REAUTH_SCHEMA, {CONF_USERNAME: entry.data.get(CONF_USERNAME)}
+            ),
+            description_placeholders={"host": entry.data[CONF_HOST]},
             errors=errors,
         )
 

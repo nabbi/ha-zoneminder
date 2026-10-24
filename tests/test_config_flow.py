@@ -666,3 +666,33 @@ async def test_reconfigure_switches_api(hass: HomeAssistant, mock_config_entry) 
     assert result["reason"] == "reconfigure_successful"
     assert mock_config_entry.data[CONF_API_BACKEND] == API_V3
     assert mock_config_entry.data[CONF_API_V3_URL] == WEB
+
+
+async def test_reauth_flow(hass: HomeAssistant, mock_config_entry) -> None:
+    """Reauth asks for the login, checks it and stores the new password."""
+    mock_config_entry.add_to_hass(hass)
+    result = await mock_config_entry.start_reauth_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+
+    bad = create_mock_zm_client(login_success=False)
+    with patch("custom_components.zoneminder.config_flow.create_zm_client", return_value=bad):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_USERNAME: "admin", CONF_PASSWORD: "wrong"}
+        )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+
+    good = create_mock_zm_client()
+    with (
+        patch("custom_components.zoneminder.config_flow.create_zm_client", return_value=good),
+        patch("custom_components.zoneminder.async_setup_entry", return_value=True),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_USERNAME: "admin", CONF_PASSWORD: "new-secret"}
+        )
+        await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert mock_config_entry.data[CONF_PASSWORD] == "new-secret"
+    assert mock_config_entry.data[CONF_HOST] == MOCK_HOST

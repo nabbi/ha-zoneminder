@@ -8,11 +8,19 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
 
-from aiozoneminder import Monitor, RunState, ZMApiError, ZMError, ZoneMinderClient
+from aiozoneminder import (
+    Monitor,
+    RunState,
+    ZMApiError,
+    ZMAuthenticationError,
+    ZMError,
+    ZoneMinderClient,
+)
 from aiozoneminder.const import SERVER_ACTIONS
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_MONITORED_CONDITIONS
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import CONF_INCLUDE_ARCHIVED, DEFAULT_INCLUDE_ARCHIVED, DEFAULT_MONITORED_CONDITIONS
@@ -154,5 +162,9 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
             data.server_available = (await client.get_server_info()).running
 
             return data
+        except ZMAuthenticationError as err:
+            # HA stops polling and starts a reauth flow, so a changed password
+            # doesn't cost a failed login every 30 s.
+            raise ConfigEntryAuthFailed(f"ZoneMinder refused the login: {err}") from err
         except ZMError as err:
             raise UpdateFailed(f"Error fetching ZoneMinder data: {err}") from err

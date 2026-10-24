@@ -169,6 +169,11 @@ What you may notice:
   only logged and the change looked accepted. An unknown `id` in `set_run_state` is an error
   too.
 
+- **Changed password:** when ZoneMinder refuses the stored login, Home Assistant stops
+  polling and asks for the login again (**Settings > Devices & Services**, "Reconfigure"
+  notice). Before, setup retried and the coordinator kept trying every 30 seconds, one
+  failed login each time, which a login throttle or fail2ban counts.
+
 Before 0.2.0 the integration required `zm-py` (0.5.6.dev1 up to 0.5.7; core uses 0.5.4).
 
 ## Options Available After Setup

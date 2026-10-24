@@ -6,7 +6,7 @@ try:
     import probatio as vol
 except ImportError:  # Home Assistant before 2026.9 validates with voluptuous
     import voluptuous as vol  # type: ignore[no-redef]
-from aiozoneminder import ZMError
+from aiozoneminder import ZMAuthenticationError, ZMError
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import (
     CONF_HOST,
@@ -17,7 +17,7 @@ from homeassistant.const import (
     CONF_VERIFY_SSL,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import issue_registry as ir
@@ -98,6 +98,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         await zm_client.authenticate()
         zm_version = await zm_client.get_version()
+    except ZMAuthenticationError as ex:
+        # Not a retry: each one would be another failed login. Ask for the password.
+        await zm_client.close()
+        raise ConfigEntryAuthFailed(f"ZoneMinder at {host_name} refused the login: {ex}") from ex
     except ZMError as ex:
         await zm_client.close()
         raise ConfigEntryNotReady(f"Cannot connect to ZoneMinder at {host_name}: {ex}") from ex
