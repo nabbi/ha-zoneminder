@@ -250,6 +250,8 @@ def zm_api(zm_config: ZmE2EConfig) -> ZoneMinder:
     It is separate from the client the integration creates, so a test sees
     the server's state, not the integration's cached objects.
     """
+    # Built when a test first asks for it, after the HA plugin closed sockets for that test.
+    _open_zm_sockets()
     client = _new_client(zm_config)
     assert client.login(), f"Cannot log in to ZoneMinder at {zm_config.url}"
     _SUMMARY["ZoneMinder"] = f"{zm_config.url} (version {client.zm_version})"
