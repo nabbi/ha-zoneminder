@@ -33,10 +33,13 @@ integration detects the server version and exposes the appropriate entities auto
 | Verify SSL | No | `true` | Verify the server certificate |
 | Path | No | `/zm/` | Web path to ZoneMinder |
 | ZMS path | No | `/zm/cgi-bin/nph-zms` | Path to the ZMS streaming CGI — must match `PATH_ZMS` in ZoneMinder's Paths settings |
+| API | No | Auto | Auto (API v2 when it answers, else API v3), API v2, or API v3 (zm-api). See the README's "API v2 and API v3" |
+| zm-api URL | No | — | Only for API v3 on its own address, e.g. `http://zm.local:8080`; empty looks under the path, then at the server root |
 
 ### Reconfiguring Connection Settings
 
-To change host, credentials, or SSL settings after initial setup:
+To change host, credentials, SSL or API settings after initial setup (this also
+detects the API again):
 
 **Settings > Devices & Services > ZoneMinder > (three-dot menu) > Reconfigure**
 
