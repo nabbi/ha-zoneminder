@@ -46,7 +46,9 @@ class ZmData:
     monitors: dict[int, ZmMonitorData] = field(default_factory=dict)
     run_state: str | None = None
     available_run_states: list[str] = field(default_factory=list)
-    server_available: bool = False
+    # None when the server doesn't say: API v3 doesn't tell a user without
+    # System view whether the daemons run.
+    server_available: bool | None = False
 
 
 class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
@@ -149,7 +151,7 @@ class ZmDataUpdateCoordinator(DataUpdateCoordinator[ZmData]):
                 run_state_objs = []
             data.available_run_states = sorted(rs.name for rs in run_state_objs)
             data.run_state = next((rs.name for rs in run_state_objs if rs.active), None)
-            data.server_available = (await client.get_server_info()).running is True
+            data.server_available = (await client.get_server_info()).running
 
             return data
         except ZMError as err:

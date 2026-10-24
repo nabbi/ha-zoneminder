@@ -6,7 +6,7 @@ from datetime import timedelta
 from unittest.mock import PropertyMock
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
-from homeassistant.const import STATE_OFF, STATE_ON
+from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
@@ -143,3 +143,13 @@ async def test_unique_id_set(
     entry = entity_registry.async_get(ENTITY_ID)
     assert entry is not None
     assert entry.unique_id is not None
+
+
+async def test_availability_unknown(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """The server doesn't say whether it runs (API v3, no System view): unknown, not off."""
+    await setup_entry(hass, mock_config_entry, is_available=None)
+
+    assert hass.states.get(ENTITY_ID).state == STATE_UNKNOWN
+    assert hass.states.get("select.zm_example_com_run_state_select").state == "Running"

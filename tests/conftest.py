@@ -296,7 +296,7 @@ def _as_monitor(mon: MagicMock) -> Monitor:
 
 
 def create_mock_zm_client(
-    is_available: bool = True,
+    is_available: bool | None = True,
     verify_ssl: bool = True,
     monitors: list | None = None,
     login_success: bool = True,
@@ -385,7 +385,7 @@ async def setup_entry(
     hass: HomeAssistant,
     entry: MockConfigEntry,
     monitors: list | None = None,
-    is_available: bool = True,
+    is_available: bool | None = True,
     active_state: str | None = "Running",
     run_state_names: list[str] | None = None,
     zm_version: str | None = "1.38.0",

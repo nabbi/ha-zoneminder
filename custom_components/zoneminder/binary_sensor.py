@@ -40,8 +40,8 @@ class ZMAvailabilitySensor(CoordinatorEntity[ZmDataUpdateCoordinator], BinarySen
         self._attr_device_info = server_device_info(host_name, coordinator.zm_version)
 
     @property
-    def is_on(self) -> bool:
-        """Return True if ZoneMinder server is available."""
+    def is_on(self) -> bool | None:
+        """Return True if ZoneMinder server is available, None when it doesn't say."""
         if data := self.coordinator.data:
-            return bool(data.server_available)
+            return data.server_available
         return False

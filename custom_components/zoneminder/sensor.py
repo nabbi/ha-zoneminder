@@ -188,7 +188,7 @@ class ZMSensorRunState(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity)
         if not self.coordinator.last_update_success:
             return False
         if data := self.coordinator.data:
-            return bool(data.server_available)
+            return data.server_available is not False
         return False
 
     @property

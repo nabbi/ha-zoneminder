@@ -88,7 +88,7 @@ class ZMSelectRunState(CoordinatorEntity[ZmDataUpdateCoordinator], SelectEntity)
         """Return the current run state, or 'stop' when daemons are down."""
         data: ZmData | None = self.coordinator.data
         if data is not None:
-            if not data.server_available:
+            if data.server_available is False:
                 return "stop"
             return data.run_state
         return None
