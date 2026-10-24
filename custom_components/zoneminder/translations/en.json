@@ -10,7 +10,39 @@
           "ssl": "Use SSL",
           "path": "Path",
           "path_zms": "ZMS path",
-          "verify_ssl": "Verify SSL certificate"
+          "verify_ssl": "Verify SSL certificate",
+          "api_version": "API",
+          "api_v3_url": "zm-api (API v3) URL"
+        },
+        "data_description": {
+          "api_version": "Auto uses API v2 when it answers, else API v3 (zm-api). On API v3 cameras show still images only for now.",
+          "api_v3_url": "Only when zm-api runs on its own address, for example http://zm.local:8080. Empty: look for /api/v3 under the path above (API v3 also tries the server root)."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure ZoneMinder",
+        "data": {
+          "host": "Host",
+          "username": "Username",
+          "password": "Password",
+          "ssl": "Use SSL",
+          "path": "Path",
+          "path_zms": "ZMS path",
+          "verify_ssl": "Verify SSL certificate",
+          "api_version": "API",
+          "api_v3_url": "zm-api (API v3) URL"
+        },
+        "data_description": {
+          "api_version": "Auto uses API v2 when it answers, else API v3 (zm-api). On API v3 cameras show still images only for now.",
+          "api_v3_url": "Only when zm-api runs on its own address, for example http://zm.local:8080. Empty: look for /api/v3 under the path above (API v3 also tries the server root)."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Log in to ZoneMinder again",
+        "description": "ZoneMinder at {host} refused the stored login. Enter the account's current username and password.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
         }
       }
     },
@@ -21,7 +53,9 @@
     },
     "abort": {
       "already_configured": "Device is already configured",
-      "cannot_connect": "Failed to connect"
+      "cannot_connect": "Failed to connect",
+      "reconfigure_successful": "Re-configuration was successful",
+      "reauth_successful": "Re-authentication was successful"
     }
   },
   "options": {
@@ -57,6 +91,15 @@
         }
       },
       "name": "Set run state"
+    }
+  },
+  "selector": {
+    "api_version": {
+      "options": {
+        "auto": "Auto",
+        "v2": "API v2 (ZoneMinder web)",
+        "v3": "API v3 (zm-api)"
+      }
     }
   }
 }

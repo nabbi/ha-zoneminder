@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from unittest.mock import MagicMock
 
 import pytest
+from aiozoneminder import ZMApiError, ZMConnectionError
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
-from requests.exceptions import Timeout
-from zoneminder.exceptions import ZoneminderError
-from zoneminder.monitor import MonitorState
 
 from custom_components.zoneminder.const import DOMAIN
+from custom_components.zoneminder.monitor_state import MonitorState
 
 from .conftest import create_mock_monitor, setup_entry
 
@@ -64,10 +63,10 @@ async def test_run_state_select_options(
     assert state.attributes.get("options") == ["Away", "Home", "Running", "stop", "restart"]
 
 
-async def test_run_state_select_option_calls_set_active_state(
+async def test_run_state_select_option_calls_set_run_state(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test selecting an option calls set_active_state on the ZM client."""
+    """Test selecting an option switches ZoneMinder to that run state."""
     monitors = [create_mock_monitor(name="Cam")]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
 
@@ -79,14 +78,16 @@ async def test_run_state_select_option_calls_set_active_state(
     )
     await hass.async_block_till_done()
 
-    client.set_active_state.assert_called_once_with("Away")
+    client.set_run_state.assert_awaited_once()
+    assert client.set_run_state.await_args.args[0].name == "Away"
+    client.server_control.assert_not_awaited()
 
 
 @pytest.mark.parametrize("option", ["stop", "restart"])
 async def test_run_state_select_system_commands(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry, option: str
 ) -> None:
-    """Test selecting stop/restart calls set_active_state with the command name."""
+    """Test selecting stop/restart sends that command to ZoneMinder (zmpkg.pl)."""
     monitors = [create_mock_monitor(name="Cam")]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
 
@@ -98,7 +99,8 @@ async def test_run_state_select_system_commands(
     )
     await hass.async_block_till_done()
 
-    client.set_active_state.assert_called_once_with(option)
+    client.server_control.assert_awaited_once_with(option)
+    client.set_run_state.assert_not_awaited()
 
 
 async def test_run_state_select_shows_stop_when_daemons_down(
@@ -137,12 +139,12 @@ async def test_run_state_select_device_info_includes_zm_version(
 async def test_run_state_select_error_zoneminder(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test ZoneminderError from set_active_state propagates."""
+    """Test ZMApiError from set_run_state propagates."""
     monitors = [create_mock_monitor(name="Cam")]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
-    client.set_active_state.side_effect = ZoneminderError("API error")
+    client.set_run_state.side_effect = ZMApiError("API error")
 
-    with pytest.raises(ZoneminderError):
+    with pytest.raises(HomeAssistantError):
         await hass.services.async_call(
             "select",
             "select_option",
@@ -154,12 +156,12 @@ async def test_run_state_select_error_zoneminder(
 async def test_run_state_select_error_timeout(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test requests.Timeout from set_active_state propagates."""
+    """Test a timeout from set_run_state propagates."""
     monitors = [create_mock_monitor(name="Cam")]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
-    client.set_active_state.side_effect = Timeout("timed out")
+    client.set_run_state.side_effect = ZMConnectionError("timed out")
 
-    with pytest.raises(Timeout):
+    with pytest.raises(HomeAssistantError):
         await hass.services.async_call(
             "select",
             "select_option",
@@ -592,26 +594,20 @@ async def test_function_select_device_info(
     assert (DOMAIN, "zm.example.com_7") in info["identifiers"]
 
 
-async def test_function_select_error_logged(
-    hass: HomeAssistant, mock_config_entry: MockConfigEntry, caplog: pytest.LogCaptureFixture
+async def test_function_select_error_raises(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test ZoneminderError from function setter is logged, not raised."""
+    """Test ZMApiError from the function write is raised as an error HA shows, not raised."""
     monitors = [create_mock_monitor(name="Cam")]
-    await setup_entry(hass, mock_config_entry, monitors=monitors)
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors)
 
-    # Make the function setter raise
-    type(monitors[0]).function = monitors[0].function  # preserve current value
-    type(monitors[0]).function = property(
-        fget=lambda self: MonitorState.MODECT,
-        fset=MagicMock(side_effect=ZoneminderError("API error")),
-    )
+    client.set_monitor_state.side_effect = ZMApiError("Monitor 1 was not saved: Error")
 
-    await hass.services.async_call(
-        "select",
-        "select_option",
-        {"entity_id": "select.cam_function", "option": "Record"},
-        blocking=True,
-    )
+    with pytest.raises(HomeAssistantError, match="Error setting monitor Cam Function to Record"):
+        await hass.services.async_call(
+            "select",
+            "select_option",
+            {"entity_id": "select.cam_function", "option": "Record"},
+            blocking=True,
+        )
     await hass.async_block_till_done()
-
-    assert "Error setting monitor Cam Function to Record" in caplog.text

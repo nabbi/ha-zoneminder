@@ -5,14 +5,12 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
+from aiozoneminder import ZMApiError, ZMAuthenticationError, ZMConnectionError
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntryState
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from requests.exceptions import ConnectionError as RequestsConnectionError
-from requests.exceptions import Timeout
-from zoneminder.exceptions import LoginError, ZoneminderError
 
 from custom_components.zoneminder import async_setup
 from custom_components.zoneminder.const import CONF_STREAM_MAXFPS, CONF_STREAM_SCALE, DOMAIN
@@ -49,24 +47,27 @@ async def test_entry_setup_login_called(
 ) -> None:
     """Test login() is called during entry setup."""
     client = await setup_entry(hass, mock_config_entry)
-    client.login.assert_called_once()
+    client.authenticate.assert_called_once()
 
 
-async def test_entry_setup_login_failure_not_ready(
+async def test_entry_setup_login_failure_reauth(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test config entry raises ConfigEntryNotReady on login failure."""
+    """A refused login at setup starts reauth instead of retrying (each retry is a failed login)."""
     client = create_mock_zm_client(login_success=False)
     mock_config_entry.add_to_hass(hass)
 
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert mock_config_entry.state is ConfigEntryState.SETUP_ERROR
+    flows = hass.config_entries.flow.async_progress()
+    assert [f["context"]["source"] for f in flows] == ["reauth"]
+    client.authenticate.assert_called_once()
 
 
 async def test_entry_setup_connection_error_not_ready(
@@ -74,11 +75,11 @@ async def test_entry_setup_connection_error_not_ready(
 ) -> None:
     """Test config entry raises ConfigEntryNotReady on connection error."""
     client = create_mock_zm_client()
-    client.login.side_effect = RequestsConnectionError("Connection refused")
+    client.authenticate.side_effect = ZMConnectionError("Connection refused")
     mock_config_entry.add_to_hass(hass)
 
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -87,22 +88,25 @@ async def test_entry_setup_connection_error_not_ready(
     assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
 
 
-async def test_entry_setup_login_error_not_ready(
+async def test_entry_setup_login_error_reauth(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test config entry raises ConfigEntryNotReady on LoginError."""
+    """ZMAuthenticationError at setup starts reauth."""
     client = create_mock_zm_client()
-    client.login.side_effect = LoginError("Invalid credentials")
+    client.authenticate.side_effect = ZMAuthenticationError("Invalid credentials")
     mock_config_entry.add_to_hass(hass)
 
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert mock_config_entry.state is ConfigEntryState.SETUP_ERROR
+    flows = hass.config_entries.flow.async_progress()
+    assert [f["context"]["source"] for f in flows] == ["reauth"]
+    client.authenticate.assert_called_once()
 
 
 async def test_entry_setup_timeout_not_ready(
@@ -110,11 +114,11 @@ async def test_entry_setup_timeout_not_ready(
 ) -> None:
     """Test config entry raises ConfigEntryNotReady on timeout."""
     client = create_mock_zm_client()
-    client.login.side_effect = Timeout("connection timed out")
+    client.authenticate.side_effect = ZMConnectionError("connection timed out")
     mock_config_entry.add_to_hass(hass)
 
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -130,11 +134,12 @@ async def test_get_monitors_error_defaults_empty(
 ) -> None:
     """Test get_monitors error defaults to empty list."""
     client = create_mock_zm_client()
-    client.get_monitors.side_effect = ZoneminderError("API error")
+    # Setup's listing fails; the coordinator's refresh then succeeds.
+    client.get_monitors.side_effect = [ZMApiError("API error"), []]
     mock_config_entry.add_to_hass(hass)
 
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -185,11 +190,11 @@ async def test_yaml_import_fires_flow(hass: HomeAssistant, single_server_config)
     client = create_mock_zm_client()
     with (
         patch(
-            "custom_components.zoneminder.config_flow.ZoneMinder",
+            "custom_components.zoneminder.config_flow.create_zm_client",
             return_value=client,
         ),
         patch(
-            "custom_components.zoneminder.ZoneMinder",
+            "custom_components.zoneminder.create_zm_client",
             return_value=client,
         ),
     ):
@@ -239,7 +244,7 @@ async def test_yaml_removed_clears_import_repair_issue(hass: HomeAssistant) -> N
 async def test_entry_setup_passes_stream_options(
     hass: HomeAssistant,
 ) -> None:
-    """Test that stream_scale and stream_maxfps options are passed to ZoneMinder()."""
+    """Test that stream_scale and stream_maxfps options reach the aiozoneminder client."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         title=MOCK_HOST,
@@ -266,7 +271,7 @@ async def test_entry_setup_passes_stream_options(
 
     client = create_mock_zm_client()
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.client.ZoneMinderLegacyClient",
         return_value=client,
     ) as mock_zm_cls:
         await hass.config_entries.async_setup(entry.entry_id)
@@ -274,6 +279,9 @@ async def test_entry_setup_passes_stream_options(
 
     mock_zm_cls.assert_called_once()
     call_kwargs = mock_zm_cls.call_args
+    assert call_kwargs.args[:3] == (f"http://{MOCK_HOST}/zm", "admin", "secret")
+    assert call_kwargs.kwargs["zms_path"] == "/zm/cgi-bin/nph-zms"
+    assert call_kwargs.kwargs["verify_ssl"] is True
     assert call_kwargs.kwargs["stream_scale"] == 50
     assert call_kwargs.kwargs["stream_maxfps"] == 5.0
 
@@ -287,7 +295,7 @@ async def test_entry_setup_stream_options_none_when_unset(
 
     client = create_mock_zm_client()
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.client.ZoneMinderLegacyClient",
         return_value=client,
     ) as mock_zm_cls:
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -296,4 +304,5 @@ async def test_entry_setup_stream_options_none_when_unset(
     mock_zm_cls.assert_called_once()
     call_kwargs = mock_zm_cls.call_args
     assert call_kwargs.kwargs["stream_scale"] is None
+    # Not aiozoneminder's default of 30: zm-py sent no maxfps unless one was set.
     assert call_kwargs.kwargs["stream_maxfps"] is None

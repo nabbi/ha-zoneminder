@@ -37,11 +37,11 @@ class ZMAvailabilitySensor(CoordinatorEntity[ZmDataUpdateCoordinator], BinarySen
         super().__init__(coordinator)
         self._attr_name = host_name
         self._attr_unique_id = f"{host_name}_availability"
-        self._attr_device_info = server_device_info(host_name, coordinator.zm_client.zm_version)
+        self._attr_device_info = server_device_info(host_name, coordinator.zm_version)
 
     @property
-    def is_on(self) -> bool:
-        """Return True if ZoneMinder server is available."""
+    def is_on(self) -> bool | None:
+        """Return True if ZoneMinder server is available, None when it doesn't say."""
         if data := self.coordinator.data:
-            return bool(data.server_available)
+            return data.server_available
         return False

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from aiozoneminder import Monitor
 from homeassistant.helpers.device_registry import DeviceInfo
-
-from zoneminder.monitor import Monitor
 
 from .const import DOMAIN
 

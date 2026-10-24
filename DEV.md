@@ -18,32 +18,26 @@ etc.) as defined in `pyproject.toml` under `[project.optional-dependencies] dev`
 > **Note:** The `[tool.hatch.build.targets.wheel] packages` setting must point to
 > `["custom_components"]` (not `["custom_components/zoneminder"]`). This ensures the editable
 > install adds `custom_components` to `sys.path` as `custom_components.zoneminder`, avoiding a
-> namespace collision with the `zoneminder` package from zm-py.
+> namespace collision with the `zoneminder` package from zm-py (the dev extra installs it for the
+> live tests).
 
-### Optional: Install zm-py from a local checkout
+### Optional: Install aiozoneminder from a local checkout
 
-If you're developing zm-py changes alongside this integration, install it from your local clone
-instead of PyPI:
-
-```bash
-pip install -e ../zm-py
-```
-
-This assumes the zm-py repo is checked out as a sibling directory, `../zm-py` (the default layout in
-the monorepo superproject). The `-e` flag means changes to your local zm-py are picked up
-immediately without reinstalling.
-
-To switch back to the PyPI version:
+The integration talks to ZoneMinder through aiozoneminder. If you're developing aiozoneminder
+changes alongside this integration, install it from your local clone:
 
 ```bash
-pip install 'zm-py==0.5.7'
+pip install -e ../aiozoneminder
 ```
+
+The `-e` flag means changes to your local aiozoneminder are picked up immediately without
+reinstalling. To switch back to the pinned version, `pip install -e '.[dev]'` again.
 
 ### Live tests against a real ZoneMinder
 
 `tests/e2e/` sets the integration up against a running ZoneMinder (e.g. a zm-holodeck stack)
-with any zm-py: the pinned release, a local checkout with uncommitted edits, or any pip
-requirement. See [tests/e2e/README.md](tests/e2e/README.md).
+and compares it with what zm-py reads from the same server. Any zm-py can be the reference: the
+pinned release, a local checkout with uncommitted edits, or any pip requirement. See [tests/e2e/README.md](tests/e2e/README.md).
 
 ```bash
 ./scripts/e2e-holodeck.sh --zm-py local --write

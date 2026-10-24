@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from aiozoneminder import (
+    EventSummary,
+    Monitor,
+    MonitorStatus,
+    RunState,
+    ServerInfo,
+    ZMAuthenticationError,
+    ZoneMinderLegacyClient,
+    function_fields,
+)
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.const import (
     CONF_HOST,
@@ -17,7 +27,6 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from zoneminder.monitor import MonitorState, TimePeriod
 
 from custom_components.zoneminder.const import (
     CONF_INCLUDE_ARCHIVED,
@@ -32,6 +41,7 @@ from custom_components.zoneminder.const import (
     DEFAULT_VERIFY_SSL,
     DOMAIN,
 )
+from custom_components.zoneminder.monitor_state import MonitorState, TimePeriod, derive_function
 
 
 @pytest.fixture(autouse=True)
@@ -176,12 +186,14 @@ def create_mock_monitor(
     recording: str | None = None,
     controllable: bool = False,
 ) -> MagicMock:
-    """Create a mock Monitor instance with configurable properties."""
+    """Create a mock monitor: the server-side state the mock client reports.
+
+    Tests change these attributes and refresh to simulate the server changing.
+    ``capturing``/``analysing``/``recording`` left None follow ``function``.
+    """
     monitor = MagicMock()
     monitor.id = monitor_id
     monitor.name = name
-
-    # function is both a property and a settable attribute in zm-py
     monitor.function = function
 
     monitor.is_recording = is_recording
@@ -239,56 +251,126 @@ def two_monitors():
     ]
 
 
+def monitor_fields(mon: MagicMock) -> tuple[str, str, str]:
+    """Return a mock monitor's (capturing, analysing, recording) as the server reports them.
+
+    Fields left None follow the monitor's function.
+    """
+    from_function = function_fields(mon.function.value if mon.function else "None")
+    capturing, analysing, recording = (
+        value if value is not None else default
+        for value, default in zip(
+            (mon.capturing, mon.analysing, mon.recording), from_function, strict=True
+        )
+    )
+    return capturing, analysing, recording
+
+
+def _write_monitor_state(mon: MagicMock, **fields: str | None) -> None:
+    """Apply a set_monitor_state call to a mock monitor, as the server would."""
+    current = dict(zip(("capturing", "analysing", "recording"), monitor_fields(mon), strict=True))
+    current.update({key: value for key, value in fields.items() if value is not None})
+    mon.capturing, mon.analysing, mon.recording = (
+        current["capturing"],
+        current["analysing"],
+        current["recording"],
+    )
+    if function := derive_function(mon.capturing, mon.analysing, mon.recording):
+        mon.function = function
+
+
+def _as_monitor(mon: MagicMock) -> Monitor:
+    """Return the aiozoneminder Monitor the mock client lists for a mock monitor."""
+    capturing, analysing, recording = monitor_fields(mon)
+    return Monitor(
+        id=mon.id,
+        name=mon.name,
+        type="Ffmpeg",
+        width=1920,
+        height=1080,
+        capturing=capturing,
+        analysing=analysing,
+        recording=recording,
+        controllable=mon.controllable,
+    )
+
+
 def create_mock_zm_client(
-    is_available: bool = True,
+    is_available: bool | None = True,
     verify_ssl: bool = True,
     monitors: list | None = None,
     login_success: bool = True,
     active_state: str | None = "Running",
     run_state_names: list[str] | None = None,
     zm_version: str | None = "1.38.0",
+    spec: type = ZoneMinderLegacyClient,
 ) -> MagicMock:
-    """Create a mock ZoneMinder client."""
-    client = MagicMock()
-    client.login.return_value = login_success
-    client.get_monitors.return_value = monitors or []
+    """Create a mock aiozoneminder client, API v2 unless ``spec`` says otherwise.
 
-    # is_available, verify_ssl, and zm_version are properties in zm-py
-    type(client).is_available = PropertyMock(return_value=is_available)
-    type(client).verify_ssl = PropertyMock(return_value=verify_ssl)
-    type(client).zm_version = PropertyMock(return_value=zm_version)
-
-    # Build get_run_states mock
-    _run_state_names = run_state_names or ["Away", "Home", "Running"]
-    mock_run_states = []
-    for name in _run_state_names:
-        rs = MagicMock()
-        rs.name = name
-        rs.active = name == active_state
-        mock_run_states.append(rs)
-    client.get_run_states.return_value = mock_run_states
-
-    client.set_active_state.return_value = True
-    client.update_all_monitors.return_value = None
-    client.move_monitor = MagicMock(return_value=True)
-    client.goto_preset = MagicMock(return_value=True)
-    client.goto_home = MagicMock(return_value=True)
-
-    # Build get_event_counts mock from monitors' event data.
-    # The coordinator pre-fetches event counts per time period; the mock
-    # delegates to each monitor's get_events() to build the result dict.
+    Reads come from the mock monitors at call time. ``client.is_available``
+    (daemonCheck) and ``client.zm_version`` can be changed by tests too.
+    """
+    client = MagicMock(spec=spec)
+    client.is_available = is_available
+    client.zm_version = zm_version
+    client.verify_ssl = verify_ssl
     _monitors = monitors or []
+    by_id = {mon.id: mon for mon in _monitors}
 
-    def _mock_get_event_counts(time_period, include_archived=False):
-        result = {}
-        for mon in _monitors:
-            val = mon.get_events(time_period, include_archived)
-            if val is None:
+    if login_success:
+        client.authenticate = AsyncMock(return_value=True)
+    else:
+        client.authenticate = AsyncMock(side_effect=ZMAuthenticationError("Invalid login"))
+    client.close = AsyncMock()
+    client.get_version = AsyncMock(side_effect=lambda: client.zm_version)
+    client.get_server_info = AsyncMock(
+        side_effect=lambda: ServerInfo(version=client.zm_version, running=client.is_available)
+    )
+    client.get_monitors = AsyncMock(side_effect=lambda: [_as_monitor(m) for m in _monitors])
+    client.get_monitor_statuses = AsyncMock(
+        side_effect=lambda: {
+            m.id: MonitorStatus(
+                monitor_id=m.id, status="Connected" if m.is_available else "NotRunning"
+            )
+            for m in _monitors
+        }
+    )
+    client.get_alarm_state = AsyncMock(
+        side_effect=lambda monitor_id: "alarm" if by_id[monitor_id].is_recording else "idle"
+    )
+
+    def _event_summary(monitor_id: int, *, include_archived: bool = True) -> EventSummary | None:
+        mon = by_id[monitor_id]
+        counts = {}
+        for time_period in TimePeriod:
+            value = mon.get_events(time_period, include_archived)
+            if value is None:
                 return None
-            result[str(mon.id)] = val
-        return result
+            counts[time_period.summary_field] = value
+        return EventSummary(monitor_id=monitor_id, **counts)
 
-    client.get_event_counts = MagicMock(side_effect=_mock_get_event_counts)
+    client.get_event_summary = AsyncMock(side_effect=_event_summary)
+
+    _run_state_names = run_state_names or ["Away", "Home", "Running"]
+    client.get_run_states = AsyncMock(
+        return_value=[
+            RunState(id=i, name=name, definition="", active=name == active_state)
+            for i, name in enumerate(_run_state_names, start=1)
+        ]
+    )
+
+    client.set_monitor_state = AsyncMock(
+        side_effect=lambda monitor_id, **fields: _write_monitor_state(by_id[monitor_id], **fields)
+    )
+    client.set_run_state = AsyncMock()
+    client.server_control = AsyncMock()
+    client.trigger_alarm = AsyncMock()
+    client.cancel_alarm = AsyncMock()
+    client.ptz = AsyncMock()
+    client.get_stream_url = MagicMock(
+        side_effect=lambda monitor_id, mode="jpeg": by_id[monitor_id].mjpeg_image_url
+    )
+    client.async_get_snapshot = AsyncMock(return_value=b"\xff\xd8image")
 
     return client
 
@@ -303,14 +385,16 @@ async def setup_entry(
     hass: HomeAssistant,
     entry: MockConfigEntry,
     monitors: list | None = None,
-    is_available: bool = True,
+    is_available: bool | None = True,
     active_state: str | None = "Running",
     run_state_names: list[str] | None = None,
     zm_version: str | None = "1.38.0",
     verify_ssl: bool = True,
+    spec: type = ZoneMinderLegacyClient,
 ) -> MagicMock:
     """Set up a ZoneMinder config entry and return the mock client."""
     client = create_mock_zm_client(
+        spec=spec,
         monitors=monitors or [],
         is_available=is_available,
         active_state=active_state,
@@ -322,7 +406,7 @@ async def setup_entry(
     entry.add_to_hass(hass)
 
     with patch(
-        "custom_components.zoneminder.ZoneMinder",
+        "custom_components.zoneminder.create_zm_client",
         return_value=client,
     ):
         await hass.config_entries.async_setup(entry.entry_id)

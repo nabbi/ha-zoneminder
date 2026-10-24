@@ -13,6 +13,9 @@ set -euo pipefail
 #                                 (tox -e e2e-local; ZM_PY_SRC overrides the path)
 #                          SPEC   any pip requirement, via tox -e e2e
 #                                 (e.g. zm-py==0.5.5, git+https://...@branch, ../zm-py)
+#                        zm-py is the reference the integration is compared with.
+#   --aiozm SPEC         aiozoneminder for the tox runs (local, SPEC): any pip requirement,
+#                        e.g. -e ../aiozoneminder (default: the commit tox.ini pins)
 #   --write              enable the write tier (monitor settings, force alarm, PTZ)
 #   --run-state          enable run state switching (restarts ZoneMinder daemons, not containers)
 #
@@ -31,10 +34,11 @@ while [[ $# -gt 0 ]]; do
         -p|--project) PROJECT="$2"; shift 2 ;;
         --port) PORT="$2"; shift 2 ;;
         --zm-py) ZM_PY_CHOICE="$2"; shift 2 ;;
+        --aiozm) export AIOZM="$2"; shift 2 ;;
         --write) export ZM_E2E_WRITE=1; shift ;;
         --run-state) export ZM_E2E_RUN_STATE=1; shift ;;
         --) shift; PYTEST_ARGS=("$@"); break ;;
-        -h|--help) sed -n '4,21p' "$0"; exit 0 ;;
+        -h|--help) sed -n '4,24p' "$0"; exit 0 ;;
         *) echo "Unknown option: $1" >&2; exit 2 ;;
     esac
 done

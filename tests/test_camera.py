@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import voluptuous as vol
-from homeassistant.components.camera import CameraState
+from aiozoneminder import ZMApiError, ZMNotSupportedError, ZoneMinderV3Client
+from homeassistant.components.camera import (
+    Camera,
+    CameraState,
+    async_get_image,
+    async_get_stream_source,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
-from zoneminder.exceptions import MonitorControlTypeError
 
 from custom_components.zoneminder.const import DOMAIN
 
@@ -164,12 +169,13 @@ async def test_empty_server_creates_no_cameras(
 async def test_get_monitors_called_once(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """get_monitors should be called once per entry setup."""
+    """Setup lists the monitors once; the first refresh reads them once more."""
     monitors = [create_mock_monitor(name="Front Door")]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
 
-    # get_monitors is called once during async_setup_entry
-    assert client.get_monitors.call_count == 1
+    # Once in async_setup_entry, once in the coordinator's first refresh (which
+    # also carries the statuses and event counts).
+    assert client.get_monitors.call_count == 2
 
 
 async def test_coordinator_shared_updates(
@@ -210,7 +216,7 @@ async def test_ptz_supported_features_set_on_controllable(
 async def test_ptz_moves_controllable_camera(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """PTZ service call should invoke move_monitor on a controllable camera."""
+    """PTZ service call should send the move to a controllable camera."""
     monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
 
@@ -222,7 +228,7 @@ async def test_ptz_moves_controllable_camera(
         blocking=True,
     )
 
-    client.move_monitor.assert_called_once_with(monitors[0], "right")
+    client.ptz.assert_awaited_once_with(1, "right")
 
 
 async def test_ptz_raises_on_non_controllable(
@@ -261,7 +267,8 @@ async def test_ptz_all_directions(
         blocking=True,
     )
 
-    client.move_monitor.assert_called_once_with(monitors[0], direction)
+    # aiozoneminder spells the diagonals with a hyphen.
+    client.ptz.assert_awaited_once_with(1, direction.replace("_", "-"))
 
 
 async def test_ptz_invalid_direction_rejected(
@@ -284,10 +291,10 @@ async def test_ptz_invalid_direction_rejected(
 async def test_ptz_api_error_raises(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """zm-py exception should be wrapped in HomeAssistantError."""
+    """Aiozoneminder exception should be wrapped in HomeAssistantError."""
     monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
-    client.move_monitor = MagicMock(side_effect=MonitorControlTypeError())
+    client.ptz.side_effect = ZMNotSupportedError("Unsupported PTZ command")
 
     with pytest.raises(HomeAssistantError, match="Failed to move camera"):
         await hass.services.async_call(
@@ -299,13 +306,11 @@ async def test_ptz_api_error_raises(
         )
 
 
-async def test_ptz_returns_false_raises(
-    hass: HomeAssistant, mock_config_entry: MockConfigEntry
-) -> None:
-    """move_monitor returning False should raise HomeAssistantError."""
+async def test_ptz_refused_raises(hass: HomeAssistant, mock_config_entry: MockConfigEntry) -> None:
+    """ZoneMinder refusing the move should raise HomeAssistantError."""
     monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
-    client.move_monitor = MagicMock(return_value=False)
+    client.ptz.side_effect = ZMApiError("ZoneMinder refused PTZ down: no reason given")
 
     with pytest.raises(HomeAssistantError, match="Failed to move camera"):
         await hass.services.async_call(
@@ -323,7 +328,7 @@ async def test_ptz_returns_false_raises(
 async def test_ptz_preset_calls_goto_preset(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """PTZ preset service with preset > 0 should call goto_preset."""
+    """PTZ preset service with preset > 0 should send that preset."""
     monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
 
@@ -335,13 +340,13 @@ async def test_ptz_preset_calls_goto_preset(
         blocking=True,
     )
 
-    client.goto_preset.assert_called_once_with(monitors[0], 3)
+    client.ptz.assert_awaited_once_with(1, "preset", preset=3)
 
 
 async def test_ptz_preset_zero_calls_goto_home(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """PTZ preset service with preset=0 should call goto_home."""
+    """PTZ preset service with preset=0 should send the camera home."""
     monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
 
@@ -353,7 +358,7 @@ async def test_ptz_preset_zero_calls_goto_home(
         blocking=True,
     )
 
-    client.goto_home.assert_called_once_with(monitors[0])
+    client.ptz.assert_awaited_once_with(1, "home")
 
 
 async def test_ptz_preset_raises_on_non_controllable(
@@ -376,10 +381,10 @@ async def test_ptz_preset_raises_on_non_controllable(
 async def test_ptz_preset_api_error_raises(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """zm-py exception should be wrapped in HomeAssistantError."""
+    """Aiozoneminder exception should be wrapped in HomeAssistantError."""
     monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
-    client.goto_preset = MagicMock(side_effect=MonitorControlTypeError())
+    client.ptz.side_effect = ZMNotSupportedError("Unsupported PTZ command")
 
     with pytest.raises(HomeAssistantError, match="Failed to move camera"):
         await hass.services.async_call(
@@ -391,13 +396,13 @@ async def test_ptz_preset_api_error_raises(
         )
 
 
-async def test_ptz_preset_returns_false_raises(
+async def test_ptz_preset_refused_raises(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """goto_preset returning False should raise HomeAssistantError."""
+    """ZoneMinder refusing the preset should raise HomeAssistantError."""
     monitors = [create_mock_monitor(name="PTZ Cam", controllable=True)]
     client = await setup_entry(hass, mock_config_entry, monitors=monitors)
-    client.goto_preset = MagicMock(return_value=False)
+    client.ptz.side_effect = ZMApiError("ZoneMinder refused PTZ preset: no reason given")
 
     with pytest.raises(HomeAssistantError, match="Failed to move camera"):
         await hass.services.async_call(
@@ -407,3 +412,54 @@ async def test_ptz_preset_returns_false_raises(
             target={"entity_id": "camera.ptz_cam"},
             blocking=True,
         )
+
+
+# --- Stream and snapshot ---
+
+
+async def test_stream_source_builds_url_each_time(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """The MJPEG URL carries the API token, so it is built again for each stream."""
+    monitors = [create_mock_monitor(name="Front Door")]
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors)
+    client.get_stream_url.side_effect = lambda monitor_id, mode="jpeg": (
+        f"http://zm.example.com/zm/cgi-bin/nph-zms?monitor={monitor_id}&token=new"
+    )
+
+    source = await async_get_stream_source(hass, "camera.front_door")
+
+    assert source == "http://zm.example.com/zm/cgi-bin/nph-zms?monitor=1&token=new"
+
+
+async def test_camera_image_from_client(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Still images come from the client's snapshot, which renews the token itself."""
+    monitors = [create_mock_monitor(name="Front Door")]
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors)
+    client.async_get_snapshot.return_value = b"\xff\xd8jpeg"
+
+    image = await async_get_image(hass, "camera.front_door")
+
+    assert image.content == b"\xff\xd8jpeg"
+    client.async_get_snapshot.assert_awaited_with(1)
+
+
+async def test_v3_camera_streams_stills(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """API v3 has no MJPEG: the camera serves HA's stream of stills instead."""
+    monitors = [create_mock_monitor(name="Front Door")]
+    client = await setup_entry(hass, mock_config_entry, monitors=monitors, spec=ZoneMinderV3Client)
+    client.async_get_snapshot.return_value = b"\xff\xd8jpeg"
+
+    image = await async_get_image(hass, "camera.front_door")
+    assert image.content == b"\xff\xd8jpeg"
+
+    camera = hass.data["camera"].get_entity("camera.front_door")
+    with patch.object(
+        Camera, "handle_async_still_stream", AsyncMock(return_value="stills")
+    ) as still_stream:
+        assert await camera.handle_async_mjpeg_stream(MagicMock()) == "stills"
+    still_stream.assert_awaited_once()

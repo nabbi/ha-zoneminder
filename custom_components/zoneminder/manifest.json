@@ -1,7 +1,7 @@
 {
   "domain": "zoneminder",
   "name": "ZoneMinder",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "config_flow": true,
   "codeowners": [
     "@nabbi"
@@ -10,9 +10,9 @@
   "issue_tracker": "https://github.com/nabbi/ha-zoneminder/issues",
   "iot_class": "local_polling",
   "loggers": [
-    "zoneminder"
+    "aiozoneminder"
   ],
   "requirements": [
-    "zm-py==0.5.7"
+    "git+https://github.com/nabbi/aiozoneminder@dba18398ba0e14133802d1a4664d44b250c86bfb#aiozoneminder==0.1.0"
   ]
 }

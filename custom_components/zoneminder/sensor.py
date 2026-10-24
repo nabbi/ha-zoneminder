@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from aiozoneminder import Monitor
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorEntityDescription,
@@ -15,8 +16,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from zoneminder.monitor import Monitor, TimePeriod, _derive_function
-
 from .const import (
     CONF_INCLUDE_ARCHIVED,
     DEFAULT_INCLUDE_ARCHIVED,
@@ -26,6 +25,7 @@ from .const import (
 from .coordinator import ZmDataUpdateCoordinator
 from .device import monitor_device_info, server_device_info
 from .models import ZmEntryData
+from .monitor_state import TimePeriod, derive_function
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ class ZMSensorMonitors(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity)
         """
         if (data := self.coordinator.data) and (md := data.monitors.get(self._monitor.id)):
             if md.capturing is not None and md.analysing is not None and md.recording is not None:
-                derived = _derive_function(md.capturing, md.analysing, md.recording)
+                derived = derive_function(md.capturing, md.analysing, md.recording)
                 if derived is not None:
                     return str(derived.value)
                 return f"{md.capturing}/{md.analysing}/{md.recording}"
@@ -180,7 +180,7 @@ class ZMSensorRunState(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity)
         """Initialize run state sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{host_name}_run_state"
-        self._attr_device_info = server_device_info(host_name, coordinator.zm_client.zm_version)
+        self._attr_device_info = server_device_info(host_name, coordinator.zm_version)
 
     @property
     def available(self) -> bool:
@@ -188,7 +188,7 @@ class ZMSensorRunState(CoordinatorEntity[ZmDataUpdateCoordinator], SensorEntity)
         if not self.coordinator.last_update_success:
             return False
         if data := self.coordinator.data:
-            return bool(data.server_available)
+            return data.server_available is not False
         return False
 
     @property
