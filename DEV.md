@@ -36,7 +36,7 @@ immediately without reinstalling.
 To switch back to the PyPI version:
 
 ```bash
-pip install 'zm-py==0.5.7'
+pip install 'zm-py==0.5.8'
 ```
 
 ### Live tests against a real ZoneMinder
