@@ -100,7 +100,7 @@ Do not ask the user to commit until all four pass. Fix any failures first.
 ## Dependencies
 
 - Runtime: `aiozoneminder` (API v2 and v3 client; pinned git commit until it is on PyPI), `homeassistant`
-- `tests/e2e` also needs `zm-py==0.5.7` (dev extra): it reads the server through zm-py, independently
+- `tests/e2e` also needs `zm-py==0.5.8` (dev extra): it reads the server through zm-py, independently
 - Test: `pytest-homeassistant-custom-component` (pulls in HA core + test fixtures)
 
 ## Bug & Feature Tracking
